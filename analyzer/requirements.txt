@@ -1,0 +1,6 @@
+anthropic
+requests
+beautifulsoup4
+spacy
+python-dotenv
+pypdf2
