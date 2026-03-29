@@ -1,2 +1,8 @@
 streamlit
 pypdf2
+anthropic
+openai
+requests
+beautifulsoup4
+spacy
+python-dotenv

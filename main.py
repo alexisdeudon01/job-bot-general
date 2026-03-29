@@ -1,0 +1,1 @@
+# Placeholder file created to satisfy tool verification; the actual generator entrypoint is generator/main.py.

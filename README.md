@@ -1,30 +1,68 @@
 # job-bot-general
 
-Project package prepared for GitHub with Docker and GitHub Actions.
+Projet Python conteneurisé avec trois services Docker Compose :
 
-## Quick start
+- `analyzer` : traitement batch d'analyse et production de `output/job_data.json`
+- `generator` : traitement batch de génération à partir des données analysées
+- `dashboard` : interface Streamlit pour suivre l'état du projet, la configuration et consulter les résultats
 
-1. Copy `.env.example` to `.env`
-2. Fill in your API keys
-3. Put your Europass CV in `data/resume_europass.txt`
-4. Run:
+## Démarrage rapide
+
+1. Copier `.env.example` vers `.env`
+2. Renseigner les clés API nécessaires
+3. Placer votre CV Europass dans `data/resume_europass.txt`
+4. Lancer l'ensemble :
 
 ```bash
 docker compose up --build
 ```
 
-## GitHub Actions included
+5. Ouvrir le dashboard : http://localhost:8501
 
-- `.github/workflows/docker-build.yml` builds all Docker images on push and pull request
-- `.github/workflows/docker-publish-ghcr.yml` publishes images to GHCR on pushes to `main`
+## Workflow recommandé
 
-## Required GitHub repo settings for publish
+- `analyzer` et `generator` sont des services batch : ils exécutent leur traitement puis s'arrêtent normalement.
+- `dashboard` reste disponible pour visualiser :
+  - l'état des fichiers d'entrée/sortie
+  - la progression globale du pipeline
+  - les logs Docker des services
+  - la disponibilité de la configuration OpenAI / Anthropic
 
-- Public repo recommended for easiest GHCR pulls
-- Actions permissions:
+Si vous modifiez les données d'entrée et souhaitez relancer le pipeline :
+
+```bash
+docker compose up --build analyzer generator
+```
+
+Le dashboard peut rester lancé en parallèle.
+
+## Volumes et fichiers utilisés
+
+- `./data:/data` : fichiers d'entrée, notamment le CV
+- `./output:/output` : fichiers générés par l'analyse et la génération
+
+Fichiers principaux attendus :
+
+- `data/resume_europass.txt`
+- `output/job_data.json`
+- `output/generation_results.json`
+
+## Remarque sur les logs dans le dashboard
+
+Le service `dashboard` monte le socket Docker en lecture seule (`/var/run/docker.sock`) afin de pouvoir consulter les logs des conteneurs et mieux afficher l'état d'exécution dans l'interface. Si votre environnement ne permet pas ce montage, le dashboard doit continuer à fonctionner, mais avec une visibilité réduite sur les logs temps réel.
+
+## GitHub Actions incluses
+
+- `.github/workflows/docker-build.yml` construit les images Docker sur `push` et `pull request`
+- `.github/workflows/docker-publish-ghcr.yml` publie les images sur GHCR lors des pushes sur `main`
+
+## Paramètres GitHub recommandés pour la publication
+
+- Dépôt public recommandé pour simplifier les pulls GHCR
+- Permissions Actions :
   - Contents: Read
   - Packages: Write
 
-## Optional secrets
+## Secrets optionnels
 
-For real deployment beyond image publish, add your own deployment target and required secrets.
+Pour un déploiement réel au-delà de la publication d'images, ajoutez votre propre cible de déploiement et les secrets nécessaires.
