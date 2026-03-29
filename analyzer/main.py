@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "").strip()
 anthropic = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 _ANTHROPIC_MODEL_CACHE = None
 
@@ -92,11 +91,6 @@ def resolve_anthropic_model():
     if _ANTHROPIC_MODEL_CACHE:
         return _ANTHROPIC_MODEL_CACHE
 
-    if ANTHROPIC_MODEL:
-        _ANTHROPIC_MODEL_CACHE = ANTHROPIC_MODEL
-        log(f"Modèle Anthropic imposé par configuration : {_ANTHROPIC_MODEL_CACHE}", "INFO")
-        return _ANTHROPIC_MODEL_CACHE
-
     log("Découverte dynamique des modèles Anthropic disponibles via l'API...", "INFO")
     models_page = anthropic.models.list(limit=100)
     available_models = []
@@ -108,26 +102,63 @@ def resolve_anthropic_model():
     if not available_models:
         raise RuntimeError("Aucun modèle Anthropic disponible pour cette clé API.")
 
-    preferred_patterns = (
-        "claude-3-7-sonnet",
-        "claude-3-5-sonnet",
-        "claude-3-5-haiku",
-        "claude-3-haiku",
-        "claude-sonnet-4",
-        "claude-opus-4",
-        "claude-opus",
-    )
-
-    for pattern in preferred_patterns:
-        for model_id in available_models:
-            if pattern in model_id:
-                _ANTHROPIC_MODEL_CACHE = model_id
-                log(f"Modèle Anthropic sélectionné automatiquement : {_ANTHROPIC_MODEL_CACHE}", "INFO")
-                return _ANTHROPIC_MODEL_CACHE
-
     _ANTHROPIC_MODEL_CACHE = available_models[0]
-    log(f"Aucun modèle préféré trouvé, utilisation du premier modèle disponible : {_ANTHROPIC_MODEL_CACHE}", "WARN")
+    log(f"Modèle Anthropic sélectionné automatiquement (1er disponible) : {_ANTHROPIC_MODEL_CACHE}", "INFO")
     return _ANTHROPIC_MODEL_CACHE
+
+
+def infer_anthropic_max_tokens_from_error(error):
+    error_message = str(error)
+    match = re.search(r"max_tokens:\s*\d+\s*>\s*(\d+)", error_message)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def get_anthropic_client():
+    if anthropic is None:
+        raise RuntimeError("ANTHROPIC_API_KEY manquante.")
+    return anthropic
+
+
+def extract_anthropic_text(response):
+    text_parts = []
+    for block in getattr(response, "content", []) or []:
+        block_text = getattr(block, "text", None)
+        if isinstance(block_text, str) and block_text.strip():
+            text_parts.append(block_text)
+
+    if not text_parts:
+        raise RuntimeError("Réponse Anthropic sans contenu textuel exploitable.")
+
+    return "\n".join(text_parts)
+
+
+def create_anthropic_message_with_adaptive_tokens(prompt, requested_max_tokens):
+    anthropic_client = get_anthropic_client()
+    model_name = resolve_anthropic_model()
+    try:
+        response = anthropic_client.messages.create(
+            model=model_name,
+            max_tokens=requested_max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response, model_name, requested_max_tokens
+    except Exception as error:
+        allowed_max_tokens = infer_anthropic_max_tokens_from_error(error)
+        if not allowed_max_tokens:
+            raise
+
+        log(
+            f"Anthropic a refusé max_tokens={requested_max_tokens}. Nouvelle tentative avec la limite détectée: {allowed_max_tokens}.",
+            "WARN",
+        )
+        response = anthropic_client.messages.create(
+            model=model_name,
+            max_tokens=allowed_max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response, model_name, allowed_max_tokens
 
 
 def extract_json(text):
@@ -184,7 +215,7 @@ def build_fallback_job_json(url, raw_text, cv_text, nlp_result, cv_analysis, err
         },
         "debug": {
             "fallback_reason": error_message,
-            "anthropic_model": _ANTHROPIC_MODEL_CACHE or ANTHROPIC_MODEL or "auto-detect",
+            "anthropic_model": _ANTHROPIC_MODEL_CACHE or "auto-detect",
             "llm_provider": "anthropic",
             "mode": "fallback",
         },
@@ -212,10 +243,12 @@ Retourne UNIQUEMENT un JSON :
   "europass_sections": {{ "summary": "...", "skills": [...] }}
 }}
 """
-    model_name = resolve_anthropic_model()
-    resp = anthropic.messages.create(model=model_name, max_tokens=8000, messages=[{"role": "user", "content": prompt}])
-    result = extract_json(resp.content[0].text)
-    log("Analyse du CV via Anthropic terminée avec succès.", "INFO")
+    resp, model_name, used_max_tokens = create_anthropic_message_with_adaptive_tokens(
+        prompt=prompt,
+        requested_max_tokens=8000,
+    )
+    result = extract_json(extract_anthropic_text(resp))
+    log(f"Analyse du CV via Anthropic terminée avec succès (modèle={model_name}, max_tokens={used_max_tokens}).", "INFO")
     return result
 
 
@@ -234,10 +267,15 @@ CV Analysis: {json.dumps(cv_analysis, ensure_ascii=False)}
 
 Retourne UNIQUEMENT un JSON complet avec "candidate_analysis", "generation_prompts" (incluant europass_cv_prompt).
 """
-    model_name = resolve_anthropic_model()
-    response = anthropic.messages.create(model=model_name, max_tokens=9000, messages=[{"role": "user", "content": prompt}])
-    result = extract_json(response.content[0].text)
-    log("JSON final d'analyse de poste généré avec succès.", "INFO")
+    response, model_name, used_max_tokens = create_anthropic_message_with_adaptive_tokens(
+        prompt=prompt,
+        requested_max_tokens=9000,
+    )
+    result = extract_json(extract_anthropic_text(response))
+    log(
+        f"JSON final d'analyse de poste généré avec succès (modèle={model_name}, max_tokens={used_max_tokens}).",
+        "INFO",
+    )
     return result
 
 

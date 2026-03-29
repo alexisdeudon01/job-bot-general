@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 
 from anthropic import Anthropic
@@ -66,6 +67,39 @@ def resolve_openai_model(openai_client):
     return available_models[0]
 
 
+def infer_anthropic_max_tokens_from_error(error):
+    error_message = str(error)
+    match = re.search(r"max_tokens:\s*\d+\s*>\s*(\d+)", error_message)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def create_anthropic_message_with_adaptive_tokens(anthropic_client, model_name, prompt, requested_max_tokens):
+    try:
+        response = anthropic_client.messages.create(
+            model=model_name,
+            max_tokens=requested_max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response, requested_max_tokens
+    except Exception as error:
+        allowed_max_tokens = infer_anthropic_max_tokens_from_error(error)
+        if not allowed_max_tokens:
+            raise
+
+        log(
+            f"Anthropic a refusé max_tokens={requested_max_tokens}. Nouvelle tentative avec la limite détectée: {allowed_max_tokens}.",
+            "WARN",
+        )
+        response = anthropic_client.messages.create(
+            model=model_name,
+            max_tokens=allowed_max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response, allowed_max_tokens
+
+
 def build_clients():
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -88,13 +122,14 @@ def generate_europass(provider, prompt, anthropic_client, openai_client, anthrop
         if anthropic_client is None:
             raise RuntimeError("ANTHROPIC_API_KEY manquante")
         log("Appel API Anthropic en cours...", "INFO")
-        response = anthropic_client.messages.create(
-            model=anthropic_model,
-            max_tokens=6000,
-            messages=[{"role": "user", "content": prompt}],
+        response, used_max_tokens = create_anthropic_message_with_adaptive_tokens(
+            anthropic_client=anthropic_client,
+            model_name=anthropic_model,
+            prompt=prompt,
+            requested_max_tokens=6000,
         )
         text = response.content[0].text
-        log(f"Réponse Anthropic reçue ({len(text)} caractères).", "INFO")
+        log(f"Réponse Anthropic reçue ({len(text)} caractères, max_tokens={used_max_tokens}).", "INFO")
         return {
             "provider": provider,
             "status": "success",
