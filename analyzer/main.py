@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_BLOCKED_MODELS = {
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-latest",
+}
 anthropic = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 _ANTHROPIC_MODEL_CACHE = None
 PROMPT_CHAR_PER_TOKEN_ESTIMATE = 4
@@ -104,7 +108,11 @@ def resolve_anthropic_model():
 
     log("Découverte dynamique des modèles Anthropic disponibles via l'API...", "INFO")
     models_page = anthropic.models.list(limit=100)
-    available_models = [model for model in models_page.data if getattr(model, "id", None)]
+    available_models = [
+        model
+        for model in models_page.data
+        if getattr(model, "id", None) and getattr(model, "id", None) not in ANTHROPIC_BLOCKED_MODELS
+    ]
 
     if not available_models:
         raise RuntimeError("Aucun modèle Anthropic disponible pour cette clé API.")
