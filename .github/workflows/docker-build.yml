@@ -21,6 +21,7 @@ jobs:
       - name: Build ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: ./${{ matrix.service }}
+          context: .
+          file: ./${{ matrix.service }}/Dockerfile
           push: false
           tags: job-bot-general/${{ matrix.service }}:ci
