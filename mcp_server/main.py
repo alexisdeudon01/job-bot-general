@@ -41,6 +41,9 @@ EUROPASS_SECTION_HINTS = {
     "summary": ["profil", "resume", "résumé", "a propos", "à propos"],
 }
 
+EUROPASS_JSON_FORMAT = "europass_cv_json"
+EUROPASS_JSON_VERSION = "1.0"
+
 
 class MCPError(RuntimeError):
     """MCP functional error."""
@@ -393,6 +396,211 @@ def extract_job_signals(text):
     }
 
 
+def find_first_match(patterns, text, flags=re.IGNORECASE):
+    for pattern in patterns:
+        match = re.search(pattern, text or "", flags)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def extract_lines(section_text):
+    return [line.strip("•- \t") for line in (section_text or "").splitlines() if line.strip()]
+
+
+def extract_personal_information(full_text, personal_section):
+    lines = extract_lines(personal_section)
+    email = find_first_match([r"([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"], full_text)
+    phone = find_first_match([r"((?:\+\d{1,3}[\s.-]?)?(?:\d[\s.-]?){8,})"], full_text)
+    linkedin = find_first_match([r"(https?://(?:www\.)?linkedin\.com/[^\s]+)"], full_text)
+    website = find_first_match([r"(https?://[^\s]+)"], full_text)
+
+    full_name = None
+    for line in lines[:8]:
+        if email and email.lower() in line.lower():
+            continue
+        if phone and phone in line:
+            continue
+        if len(line.split()) >= 2 and len(line) <= 80 and not any(char.isdigit() for char in line):
+            full_name = line
+            break
+
+    return {
+        "full_name": full_name,
+        "email": email,
+        "phone": phone,
+        "location": {
+            "full_address": None,
+            "city": None,
+            "country": None,
+        },
+        "nationality": None,
+        "date_of_birth": None,
+        "digital_presence": [value for value in [linkedin, website] if value],
+        "raw_text": personal_section.strip(),
+    }
+
+
+def extract_headline(summary_section):
+    lines = extract_lines(summary_section)
+    if not lines:
+        return {"title": None, "summary": None}
+
+    if len(lines) == 1:
+        return {"title": None, "summary": lines[0]}
+
+    return {
+        "title": lines[0],
+        "summary": "\n".join(lines[1:]).strip() or lines[0],
+    }
+
+
+def extract_list_entries(section_text, default_title_key):
+    lines = extract_lines(section_text)
+    entries = []
+    current = []
+
+    for line in lines:
+        if re.search(r"\b(19|20)\d{2}\b", line) and current:
+            entries.append("\n".join(current).strip())
+            current = [line]
+        else:
+            current.append(line)
+
+    if current:
+        entries.append("\n".join(current).strip())
+
+    normalized_entries = []
+    for raw_entry in entries:
+        entry_lines = [line.strip() for line in raw_entry.splitlines() if line.strip()]
+        if not entry_lines:
+            continue
+
+        normalized_entries.append(
+            {
+                default_title_key: entry_lines[0],
+                "description": "\n".join(entry_lines[1:]).strip() or None,
+                "raw_text": raw_entry,
+            }
+        )
+
+    return normalized_entries
+
+
+def extract_work_experience(section_text):
+    base_entries = extract_list_entries(section_text, "position")
+    normalized = []
+    for entry in base_entries:
+        normalized.append(
+            {
+                "position": entry.get("position"),
+                "employer": None,
+                "location": None,
+                "start_date": None,
+                "end_date": None,
+                "is_current": False,
+                "description": entry.get("description"),
+                "achievements": [],
+                "raw_text": entry.get("raw_text"),
+            }
+        )
+    return normalized
+
+
+def extract_education(section_text):
+    base_entries = extract_list_entries(section_text, "title")
+    normalized = []
+    for entry in base_entries:
+        normalized.append(
+            {
+                "title": entry.get("title"),
+                "institution": None,
+                "start_date": None,
+                "end_date": None,
+                "description": entry.get("description"),
+                "raw_text": entry.get("raw_text"),
+            }
+        )
+    return normalized
+
+
+def extract_skills(section_text):
+    lines = extract_lines(section_text)
+    return {
+        "digital_skills": [{"name": line, "level": None} for line in lines],
+        "communication_skills": [],
+        "organisational_skills": [],
+        "job_related_skills": [],
+        "other_skills": [],
+        "driving_licences": [],
+        "raw_text": section_text.strip(),
+    }
+
+
+def extract_languages(section_text):
+    lines = extract_lines(section_text)
+    languages = []
+    for line in lines:
+        languages.append(
+            {
+                "language": line,
+                "overall": None,
+                "listening": None,
+                "reading": None,
+                "spoken_interaction": None,
+                "spoken_production": None,
+                "writing": None,
+            }
+        )
+    return languages
+
+
+def build_europass_cv_json(pdf_path, source_info, full_text, sections):
+    personal_section = sections.get("personal_information", "")
+    summary_section = sections.get("summary", "")
+    work_section = sections.get("work_experience", "")
+    education_section = sections.get("education", "")
+    skills_section = sections.get("skills", "")
+    projects_section = sections.get("projects", "")
+    certifications_section = sections.get("certifications", "")
+
+    return {
+        "format": EUROPASS_JSON_FORMAT,
+        "version": EUROPASS_JSON_VERSION,
+        "metadata": {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parser": "job-bot-mcp",
+            "schema": "internal-europass-structured-json",
+        },
+        "personal_information": extract_personal_information(full_text, personal_section),
+        "headline": extract_headline(summary_section),
+        "work_experience": extract_work_experience(work_section),
+        "education_and_training": extract_education(education_section),
+        "skills": extract_skills(skills_section),
+        "languages": extract_languages(skills_section),
+        "projects": extract_list_entries(projects_section, "title"),
+        "certifications": extract_list_entries(certifications_section, "title"),
+        "publications": [],
+        "volunteering": [],
+        "digital_presence": extract_personal_information(full_text, personal_section).get("digital_presence", []),
+        "additional_information": {
+            "summary": None,
+            "references": [],
+            "annexes": [],
+        },
+        "attachments": [],
+        "source_document": {
+            "file_path": pdf_path,
+            "file_type": "application/pdf",
+            "page_count": source_info.get("page_count"),
+            "file_size_bytes": source_info.get("file_size_bytes"),
+            "extraction_method": "pdf_to_structured_json",
+        },
+        "raw_sections": sections,
+        "raw_text_excerpt": full_text[:20000],
+    }
+
+
 def build_strategy_prompt(cv_data, job_data, objective):
     return (
         "Tu es un assistant carrière senior.\n"
@@ -469,6 +677,22 @@ def europass_pdf_to_json(pdf_path: str) -> dict:
             "total_chars": len(full_text),
         },
     }
+
+
+@mcp.tool()
+def europass_pdf_to_structured_json(pdf_path: str = "data/cv.pdf") -> dict:
+    """Convertit un CV Europass PDF en JSON métier structuré adapté au pipeline."""
+    raw_pdf_json = europass_pdf_to_json(pdf_path=pdf_path)
+    source_info = raw_pdf_json.get("source", {})
+    sections = raw_pdf_json.get("structure", {}).get("sections", {})
+    full_text = raw_pdf_json.get("raw", {}).get("text_excerpt", "")
+
+    return build_europass_cv_json(
+        pdf_path=source_info.get("pdf_path", resolve_file_path(pdf_path)),
+        source_info=source_info,
+        full_text=full_text,
+        sections=sections,
+    )
 
 
 @mcp.tool()
@@ -623,7 +847,7 @@ def career_pipeline_from_pdf_and_url(
     4) Retourne un pack final (et optionnellement l'écrit sur disque)
     """
 
-    cv_data = europass_pdf_to_json(pdf_path=pdf_path)
+    cv_data = europass_pdf_to_structured_json(pdf_path=pdf_path)
     job_data = job_url_to_json(url=job_url)
 
     dual_results = career_strategy_dual(
