@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
-venv/
-.venv/
+
 .env
-output/
+.env.*
+!.env.example
 .git/
+
+output/
+data/*.pdf
+data/*.txt
+*.log
