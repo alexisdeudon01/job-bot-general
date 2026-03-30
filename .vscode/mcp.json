@@ -7,11 +7,17 @@
 				"scrapegraph-mcp@1.0.1"
 			],
 			"env": {
-				"SGAI_API_KEY": "sgai-2e6ca190-183c-4f81-aeb9-aaa28db58cc1"
+				"SGAI_API_KEY": "${input:sgaiApiKey}"
 			},
 			"gallery": "https://api.mcp.github.com",
 			"version": "1.0.1"
 		}
 	},
-	"inputs": []
+	"inputs": [
+		{
+			"id": "sgaiApiKey",
+			"type": "promptString",
+			"description": "ScrapeGraph API key (use the GitHub secret SGAI_API_KEY value)"
+		}
+	]
 }

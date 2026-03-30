@@ -7,6 +7,7 @@ from mcp_server.services.normalization import (
     normalize_analyze_result,
     validate_job_url,
 )
+from mcp_server.services.scrapegraph_service import ScrapeGraphService
 from mcp_server.utils.errors import MCPServerError
 
 
@@ -15,6 +16,14 @@ def error_to_dict(error: Exception) -> dict:
 
 
 def register_tools(mcp, client: OrchestratorClient) -> None:
+    scrapegraph_service: ScrapeGraphService | None = None
+
+    def get_scrapegraph_service() -> ScrapeGraphService:
+        nonlocal scrapegraph_service
+        if scrapegraph_service is None:
+            scrapegraph_service = ScrapeGraphService()
+        return scrapegraph_service
+
     @mcp.tool()
     def analyze_job(url: str) -> dict:
         """Analyze a job offer URL and return structured information."""
@@ -40,6 +49,46 @@ def register_tools(mcp, client: OrchestratorClient) -> None:
         try:
             payload = build_run_payload(url, resume_text)
             return client.post("/api/run", payload)
+        except MCPServerError as exc:
+            return error_to_dict(exc)
+
+    @mcp.tool()
+    def scrapegraph_extract_job_offer(url: str) -> dict:
+        """Extract a structured job offer from a URL using ScrapeGraph."""
+        try:
+            valid_url = validate_job_url(url)
+            return get_scrapegraph_service().extract_job_offer(valid_url)
+        except MCPServerError as exc:
+            return error_to_dict(exc)
+
+    @mcp.tool()
+    def scrapegraph_company_hiring_intelligence(
+        company_name: str,
+        role_focus: str | None = None,
+        location: str | None = None,
+        num_results: int = 5,
+        time_range: str = "30d",
+    ) -> dict:
+        """Research company hiring signals across multiple sources for job-search strategy."""
+        try:
+            if not company_name or not isinstance(company_name, str):
+                raise MCPServerError("company_name must be a non-empty string")
+            return get_scrapegraph_service().research_company_hiring_signals(
+                company_name=company_name,
+                role_focus=role_focus,
+                location=location,
+                num_results=num_results,
+                time_range=time_range,
+            )
+        except MCPServerError as exc:
+            return error_to_dict(exc)
+
+    @mcp.tool()
+    def scrapegraph_markdownify_job_page(url: str) -> dict:
+        """Convert a job page into markdown for downstream analysis or prompting."""
+        try:
+            valid_url = validate_job_url(url)
+            return get_scrapegraph_service().markdownify_job_page(valid_url)
         except MCPServerError as exc:
             return error_to_dict(exc)
 

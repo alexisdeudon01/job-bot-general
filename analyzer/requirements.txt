@@ -3,3 +3,4 @@ requests
 beautifulsoup4
 spacy
 python-dotenv
+scrapegraph-py

@@ -11,9 +11,15 @@ jobs:
     strategy:
       matrix:
         service: [analyzer, generator, dashboard]
+    env:
+      SGAI_API_KEY: ${{ secrets.SGAI_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify ScrapeGraph secret wiring
+        if: ${{ env.SGAI_API_KEY != '' }}
+        run: echo "SGAI_API_KEY is available for workflow runtime."
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -25,3 +31,5 @@ jobs:
           file: ./${{ matrix.service }}/Dockerfile
           push: false
           tags: job-bot-general/${{ matrix.service }}:ci
+          build-args: |
+            SGAI_API_KEY=${{ env.SGAI_API_KEY }}
