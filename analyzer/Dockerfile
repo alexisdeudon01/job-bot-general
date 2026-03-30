@@ -8,14 +8,12 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt /tmp/requirements-root.txt
-COPY analyzer/requirements.txt /tmp/requirements-analyzer.txt
+COPY requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements-root.txt \
-    && pip install --no-cache-dir -r /tmp/requirements-analyzer.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
     && python -m spacy download fr_core_news_sm
 
 COPY . /app
 
-CMD ["python", "analyzer/main.py"]
+CMD ["python", "main.py"]

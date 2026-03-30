@@ -25,3 +25,5 @@ class AnalyzerArtifacts:
     cv_analysis: Dict[str, Any]
     job_json: Dict[str, Any]
     fallback_reason: Optional[str] = None
+    job_offer_structured: Optional[Dict[str, Any]] = None
+    scraping_source: Optional[str] = None

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = Field(default=None)
     openai_api_key: str | None = Field(default=None)
+    scrapegraph_api_key: str | None = Field(default=None, alias="SGAI_API_KEY")
 
 
 @lru_cache
