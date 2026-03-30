@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 import streamlit as st
 
-from dashboard.components.sections import render_section_header
-from dashboard.pages import (
-    render_entities_page,
-    render_github_actions_page,
-    render_llm_history_page,
-    render_overview_page,
-    render_runs_page,
-)
+from dashboard.pages.entities import render_page as render_entities_page
+from dashboard.pages.github_actions import render_page as render_github_actions_page
+from dashboard.pages.llm_history import render_page as render_llm_history_page
+from dashboard.pages.overview import render_page as render_overview_page
+from dashboard.pages.runs import render_page as render_runs_page
 from dashboard.services.api_client import ApiClient
+from dashboard.services.view_models import (
+    build_db_graph_diagram,
+    build_db_graph_edges_table,
+    build_db_graph_nodes_table,
+    build_mcp_servers_table,
+    build_mcp_summary_rows,
+    build_mcp_tools_table,
+)
 
 st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
 
@@ -20,131 +26,224 @@ st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
 def init_session_state() -> None:
     if "dashboard_last_refresh_at" not in st.session_state:
         st.session_state.dashboard_last_refresh_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if "dashboard_auto_refresh" not in st.session_state:
-        st.session_state.dashboard_auto_refresh = False
-    if "dashboard_refresh_interval" not in st.session_state:
-        st.session_state.dashboard_refresh_interval = 10
+    if "pipeline_last_result" not in st.session_state:
+        st.session_state.pipeline_last_result = None
+    if "job_url_input" not in st.session_state:
+        st.session_state.job_url_input = ""
+    if "cv_pdf_input" not in st.session_state:
+        st.session_state.cv_pdf_input = "data/cv.pdf"
+    if "dashboard_active_page" not in st.session_state:
+        st.session_state.dashboard_active_page = "app"
 
 
-def render_sidebar() -> tuple[str, ApiClient]:
-    st.sidebar.title("Job Bot Control Tower")
-    st.sidebar.caption("Dashboard modulaire orienté API, observabilité, historique IA et orchestration.")
+def _extract_steps(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return result.get("steps", []) if isinstance(result, dict) else []
 
-    api_base_url = st.sidebar.text_input(
-        "Base URL API",
-        value=ApiClient().base_url,
-        help="URL de l'orchestrateur FastAPI. Exemple: http://localhost:8000",
-    )
 
-    client = ApiClient(base_url=api_base_url)
+def _render_step(step: dict[str, Any], idx: int) -> None:
+    name = step.get("step", f"step_{idx}")
+    status = step.get("status", "unknown")
+    detail = step.get("detail", "")
+    output = step.get("output", {})
 
-    pages = {
-        "Overview": "Vue d’ensemble",
-        "Entities": "Entités / OSINT / conformité",
-        "Runs": "Pipeline runs / flux live",
-        "GitHub Actions": "GitHub Actions",
-        "LLM History": "Historique IA",
-    }
+    icon = "✅" if status == "completed" else ("❌" if status == "failed" else "⏳")
+    st.markdown(f"### {icon} {idx}. {name}")
+    if detail:
+        st.caption(detail)
+    with st.expander("Output", expanded=False):
+        st.json(output)
 
-    selected_page = st.sidebar.radio(
-        "Navigation",
-        options=list(pages.keys()),
-        format_func=lambda key: pages[key],
-    )
 
-    st.sidebar.divider()
-    st.sidebar.write("**Connectivité**")
-    health = client.fetch_health()
-    status = health.get("status", "unknown")
-    if status == "ok":
-        st.sidebar.success("API orchestrateur disponible")
-    elif status == "unreachable":
-        st.sidebar.warning("API indisponible, mode fallback")
-    else:
-        st.sidebar.info(f"État API : {status}")
+def _render_app_page(client: ApiClient) -> None:
+    st.title("Pipeline candidature")
+    st.caption("Entrer seulement l'URL du post et le CV PDF, puis lancer le pipeline MCP.")
 
-    auto_refresh = st.sidebar.toggle("Auto-refresh (UI)", value=st.session_state.dashboard_auto_refresh)
-    st.session_state.dashboard_auto_refresh = auto_refresh
-    st.session_state.dashboard_refresh_interval = st.sidebar.slider(
-        "Intervalle refresh (sec)",
-        min_value=5,
-        max_value=60,
-        value=int(st.session_state.dashboard_refresh_interval),
-        step=5,
-    )
+    with st.container(border=True):
+        st.subheader("Entrées")
+        st.session_state.job_url_input = st.text_input(
+            "URL du post",
+            value=st.session_state.job_url_input,
+            placeholder="https://company.com/jobs/123",
+        )
+        st.session_state.cv_pdf_input = st.text_input(
+            "Chemin CV PDF",
+            value=st.session_state.cv_pdf_input,
+            placeholder="data/cv.pdf",
+        )
 
-    if st.sidebar.button("Rafraîchir maintenant", use_container_width=True):
+        run_clicked = st.button("Lancer pipeline 12 étapes", type="primary", use_container_width=True)
+
+    if run_clicked:
+        payload = {
+            "source": "dashboard",
+            "payload": {
+                "job_url": str(st.session_state.job_url_input or "").strip(),
+                "cv_pdf_path": str(st.session_state.cv_pdf_input or "").strip(),
+            },
+            "options": {"mode": "mcp_first"},
+        }
+        result = client.post_json("/api/v1/pipeline/full", payload=payload, fallback={"status": "failed", "steps": []})
+        st.session_state.pipeline_last_result = result
         st.session_state.dashboard_last_refresh_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        st.rerun()
 
-    st.sidebar.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
-
-    return selected_page, client
-
-
-def render_header() -> None:
-    st.title("🚀 Job Bot General — Control Tower")
-    st.caption(
-        "Cockpit API-first pour le pipeline CV ↔ offre ↔ IA, les entités métier, les runs temps réel, "
-        "les historiques LLM et les workflows GitHub Actions."
-    )
-
-
-def render_footer() -> None:
     st.divider()
-    render_section_header(
-        "Architecture cible",
-        "Le dashboard ne pilote plus directement des scripts locaux : il devient un client visuel de l’orchestrateur FastAPI "
-        "et des microservices analyzer / generator / MCP.",
-    )
-    st.code(
-        """[Streamlit Dashboard]
-      |
-      +--> GET /health
-      +--> GET /api/v1/dashboard/overview
-      +--> GET /api/v1/providers/status
-      +--> GET /api/v1/pipeline/runs
-      +--> POST /api/v1/pipeline/analyze
-      +--> POST /api/v1/pipeline/generate
-      +--> POST /api/v1/pipeline/full
-      `--> GET /api/v1/github-actions/runs
+    st.subheader("Actions / étapes du pipeline")
 
-[FastAPI Orchestrator]
-      |
-      +--> PostgreSQL
-      +--> Redis
-      +--> analyzer service
-      +--> generator service
-      `--> mcp adapter""",
-        language="text",
-    )
-    st.info("Dashboard prêt — interface modulaire orientée observabilité, données et orchestration.")
+    result = st.session_state.pipeline_last_result
+    if not result:
+        st.info("Aucune exécution pour le moment.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Run ID", str(result.get("run_id", "—")))
+        col2.metric("Type", str(result.get("pipeline_type", "full")))
+        col3.metric("Status", str(result.get("status", "unknown")))
+
+        steps = _extract_steps(result)
+        if not steps:
+            st.warning("Aucune étape retournée.")
+        else:
+            for i, step in enumerate(steps, start=1):
+                _render_step(step, i)
+
+        with st.expander("Réponse brute", expanded=False):
+            st.json(result)
+
+
+def _render_schema_architecture_page(client: ApiClient) -> None:
+    st.title("Architecture BDD")
+    st.caption("Vue détaillée du schéma relationnel exposé par l'API dashboard, avec fallback si l'endpoint n'est pas encore disponible.")
+
+    db_graph = client.fetch_dashboard_db_graph()
+
+    left_col, right_col = st.columns([1.1, 1])
+
+    with left_col:
+        st.subheader("Diagramme texte")
+        st.code(build_db_graph_diagram(db_graph), language="text")
+
+    with right_col:
+        st.subheader("Relations")
+        edge_rows = build_db_graph_edges_table(db_graph)
+        if edge_rows:
+            st.dataframe(edge_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucune relation BDD détaillée disponible.")
+
+    st.subheader("Tables")
+    node_rows = build_db_graph_nodes_table(db_graph)
+    if node_rows:
+        st.dataframe(node_rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucune table détaillée exposée par l'API.")
+
+    with st.expander("Payload brut graphe BDD", expanded=False):
+        st.json(db_graph)
+
+
+def _render_mcp_page(client: ApiClient) -> None:
+    st.title("MCP / Providers")
+    st.caption("Vue détaillée des providers, serveurs MCP et outils exposés par l'API.")
+
+    health = client.fetch_health()
+    providers = client.fetch_provider_status()
+    mcp_payload = client.fetch_dashboard_mcp()
+
+    top_left, top_right = st.columns([1, 1])
+
+    with top_left:
+        st.subheader("Santé API")
+        st.json(health, expanded=False)
+
+    with top_right:
+        st.subheader("Providers")
+        if providers:
+            st.dataframe(providers, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Aucun statut provider disponible depuis l'API.")
+
+    middle_left, middle_right = st.columns([1, 1])
+
+    with middle_left:
+        st.subheader("Résumé MCP")
+        summary_rows = build_mcp_summary_rows(mcp_payload)
+        if summary_rows:
+            st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucun résumé MCP détaillé disponible.")
+
+        st.subheader("Serveurs MCP")
+        server_rows = build_mcp_servers_table(mcp_payload)
+        if server_rows:
+            st.dataframe(server_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucun serveur MCP détaillé disponible.")
+
+    with middle_right:
+        st.subheader("Outils MCP")
+        tool_rows = build_mcp_tools_table(mcp_payload)
+        if tool_rows:
+            st.dataframe(tool_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucun outil MCP détaillé disponible.")
+
+        st.subheader("Chaîne cible")
+        st.code(
+            """Dashboard Streamlit
+  └── FastAPI orchestrator
+        ├── providers status
+        ├── pipeline runs
+        ├── github actions
+        ├── MCP servers
+        └── MCP tools / calls""",
+            language="text",
+        )
+
+    with st.expander("Payload brut MCP", expanded=False):
+        st.json(mcp_payload)
 
 
 def main() -> None:
     init_session_state()
-    selected_page, client = render_sidebar()
+    client = ApiClient()
 
-    render_header()
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio(
+        "Onglets",
+        options=[
+            ("app", "App"),
+            ("overview", "Overview"),
+            ("entities", "Entités"),
+            ("runs", "Runs"),
+            ("llm_history", "Historique IA"),
+            ("github_actions", "GitHub Actions"),
+            ("schema", "Architecture BDD"),
+            ("mcp", "MCP"),
+        ],
+        format_func=lambda item: item[1],
+        index=0,
+    )[0]
 
-    if selected_page == "Overview":
+    st.session_state.dashboard_active_page = page
+
+    if page == "app":
+        _render_app_page(client)
+    elif page == "overview":
         render_overview_page(client)
-    elif selected_page == "Entities":
+    elif page == "entities":
         render_entities_page(client)
-    elif selected_page == "Runs":
+    elif page == "runs":
         render_runs_page(client)
-    elif selected_page == "GitHub Actions":
-        render_github_actions_page(client)
-    elif selected_page == "LLM History":
+    elif page == "llm_history":
         render_llm_history_page(client)
+    elif page == "github_actions":
+        render_github_actions_page(client)
+    elif page == "schema":
+        _render_schema_architecture_page(client)
+    elif page == "mcp":
+        _render_mcp_page(client)
 
-    render_footer()
-
-    if st.session_state.dashboard_auto_refresh:
-        st.caption(
-            f"Auto-refresh activé ({st.session_state.dashboard_refresh_interval}s). "
-            "Utiliser le rerun intégré du navigateur/Streamlit si nécessaire pendant la phase transitoire."
-        )
+    st.divider()
+    st.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
 
 
 if __name__ == "__main__":

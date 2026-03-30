@@ -4,45 +4,71 @@ import streamlit as st
 
 from dashboard.components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
 from dashboard.services.api_client import ApiClient
-from dashboard.services.view_models import build_llm_history_rows
+from dashboard.services.view_models import build_llm_history_rows, build_llm_recent_messages, build_llm_sessions_table
+
+
+def _build_llm_diagram() -> str:
+    return """providers
+   |
+   +--> llm_models
+   |        |
+   |        `--> requests / responses
+   |
+   +--> chat_sessions
+   |        |
+   |        `--> chat_messages
+   |
+   `--> pipeline_runs / service_runs"""
 
 
 def render_page(api_client: ApiClient | None = None) -> None:
     client = api_client or ApiClient()
+    llm_payload = client.fetch_dashboard_llm_history()
     overview = client.fetch_dashboard_overview()
     providers = client.fetch_provider_status()
-    rows = build_llm_history_rows(overview, providers)
+
+    summary_rows = build_llm_history_rows(llm_payload, providers)
+    recent_messages = build_llm_recent_messages(llm_payload)
+    session_rows = build_llm_sessions_table(llm_payload)
 
     render_section_header(
-        "Historique IA",
-        "Prépare une vue consolidée des interactions providers / modèles / sessions. En attendant, la page s'appuie sur les statuts exposés par l'API.",
+        "Historique IA réel",
+        "Vue consolidée des providers, modèles, sessions et messages récents. Fallback automatique sur les données overview/providers si nécessaire.",
     )
 
-    table_col, diagram_col = st.columns([1.2, 1])
+    top_left, top_right = st.columns([1.2, 1])
 
-    with table_col:
+    with top_left:
         render_table_section(
-            "Activité providers",
-            rows,
-            caption="Base de travail pour relier plus tard providers, modèles LLM, chat_sessions et chat_messages.",
+            "Synthèse activité LLM",
+            summary_rows,
+            caption="Source privilégiée : GET /api/v1/dashboard/llm-history",
         )
 
-    with diagram_col:
-        render_text_diagram(
-            "Projection cible",
-            """providers
-   |
-   +--> llm_models
-   |
-   +--> chat_sessions
-            |
-            +--> chat_messages
-            |
-            `--> service_runs / pipeline_runs""",
+    with top_right:
+        render_text_diagram("Projection des relations LLM", _build_llm_diagram())
+
+    middle_left, middle_right = st.columns([1.2, 1])
+
+    with middle_left:
+        render_table_section(
+            "Messages récents",
+            recent_messages,
+            caption="Extraits récents des interactions LLM pour audit et debugging.",
         )
+
+    with middle_right:
+        render_table_section(
+            "Sessions",
+            session_rows,
+            caption="Sessions agrégées par provider / modèle pour suivre l'activité réelle.",
+        )
+
+    if not recent_messages and not session_rows and summary_rows:
+        st.info("L'API ne renvoie pas encore les détails des messages/sessions ; la synthèse providers reste affichée.")
 
     render_json_section(
-        "Payload brut providers",
-        providers,
-        caption="Utile pour brancher l'historique IA réel dès que les endpoints détaillés seront exposés.",
+        "Payload brut LLM history",
+        llm_payload or overview.get("llm_history", {}),
+        caption="Payload utile pour valider l'intégration backend de l'historique LLM.",
     )

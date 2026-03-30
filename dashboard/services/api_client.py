@@ -64,6 +64,26 @@ class ApiClient:
             "services": [],
             "recent_pipeline_runs": [],
             "recent_github_runs": [],
+            "entities": {
+                "summary": [],
+                "relationships": [],
+                "records": {},
+            },
+            "llm_history": {
+                "summary": [],
+                "recent_messages": [],
+                "sessions": [],
+            },
+            "mcp": {
+                "summary": [],
+                "servers": [],
+                "tools": [],
+            },
+            "db_graph": {
+                "nodes": [],
+                "edges": [],
+                "diagram": "",
+            },
             "source": "fallback",
         }
         return self.get_json("/api/v1/dashboard/overview", fallback=fallback) or fallback
@@ -79,3 +99,39 @@ class ApiClient:
     def fetch_github_actions_runs(self) -> list[dict[str, Any]]:
         fallback: list[dict[str, Any]] = []
         return self.get_json("/api/v1/github-actions/runs", fallback=fallback) or fallback
+
+    def fetch_dashboard_entities(self) -> dict[str, Any]:
+        fallback = self.fetch_dashboard_overview().get("entities") or {
+            "summary": [],
+            "relationships": [],
+            "records": {},
+            "source": "overview_fallback",
+        }
+        return self.get_json("/api/v1/dashboard/entities", fallback=fallback) or fallback
+
+    def fetch_dashboard_llm_history(self) -> dict[str, Any]:
+        fallback = self.fetch_dashboard_overview().get("llm_history") or {
+            "summary": [],
+            "recent_messages": [],
+            "sessions": [],
+            "source": "overview_fallback",
+        }
+        return self.get_json("/api/v1/dashboard/llm-history", fallback=fallback) or fallback
+
+    def fetch_dashboard_mcp(self) -> dict[str, Any]:
+        fallback = self.fetch_dashboard_overview().get("mcp") or {
+            "summary": [],
+            "servers": [],
+            "tools": [],
+            "source": "overview_fallback",
+        }
+        return self.get_json("/api/v1/dashboard/mcp-status", fallback=fallback) or fallback
+
+    def fetch_dashboard_db_graph(self) -> dict[str, Any]:
+        fallback = self.fetch_dashboard_overview().get("db_graph") or {
+            "nodes": [],
+            "edges": [],
+            "diagram": "",
+            "source": "overview_fallback",
+        }
+        return self.get_json("/api/v1/dashboard/db-schema", fallback=fallback) or fallback

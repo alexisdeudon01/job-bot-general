@@ -4,5 +4,95 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+		"python.terminal.activateEnvironment": true,
+		"python.analysis.extraPaths": [
+			"${workspaceFolder}",
+			"${workspaceFolder}/app",
+			"${workspaceFolder}/shared"
+		],
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.pytest_cache": true,
+			"**/.mypy_cache": true
+		}
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "🐍 Setup venv",
+				"type": "shell",
+				"command": "bash scripts/setup-venv.sh",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Build: analyzer",
+				"type": "shell",
+				"command": "docker build -f analyzer/Dockerfile -t job-bot-analyzer .",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Build: generator",
+				"type": "shell",
+				"command": "docker build -f generator/Dockerfile -t job-bot-generator .",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Build: dashboard",
+				"type": "shell",
+				"command": "docker build -f dashboard/Dockerfile -t job-bot-dashboard .",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Build: mcp",
+				"type": "shell",
+				"command": "docker build -f mcp_server/Dockerfile -t job-bot-mcp .",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Build: all",
+				"type": "shell",
+				"command": "docker compose build",
+				"group": "build",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🚀 Compose up (core)",
+				"type": "shell",
+				"command": "docker compose up --build",
+				"group": "test",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🚀 Compose up (batch: analyzer + generator)",
+				"type": "shell",
+				"command": "docker compose --profile batch up --build analyzer generator",
+				"group": "test",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			},
+			{
+				"label": "🚀 Compose up (mcp)",
+				"type": "shell",
+				"command": "docker compose --profile mcp up --build mcp",
+				"group": "test",
+				"presentation": { "reveal": "always", "panel": "shared" },
+				"problemMatcher": []
+			}
+		]
+	}
 }

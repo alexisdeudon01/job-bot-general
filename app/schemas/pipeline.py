@@ -8,6 +8,8 @@ class PipelineRequest(BaseModel):
     source: str = "manual"
     payload: dict[str, Any] = Field(default_factory=dict)
     options: dict[str, Any] = Field(default_factory=dict)
+    job_url: str | None = None
+    cv_pdf_path: str | None = None
 
 
 class PipelineStepResult(BaseModel):
