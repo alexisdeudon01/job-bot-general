@@ -27,15 +27,17 @@ def _build_run_steps_table(items: list[dict[str, object]]) -> list[dict[str, obj
     rows = []
     for item in items[:40]:
         run_id = item.get("id") or item.get("run_id") or "—"
-        for step in item.get("steps", []) if isinstance(item.get("steps"), list) else []:
-            rows.append(
-                {
-                    "run_id": run_id,
-                    "step": step.get("step") or step.get("name") or "step",
-                    "status": step.get("status") or "unknown",
-                    "detail": step.get("detail") or "—",
-                }
-            )
+        steps = item.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                rows.append(
+                    {
+                        "run_id": run_id,
+                        "step": step.get("step") or step.get("name") or "step",
+                        "status": step.get("status") or "unknown",
+                        "detail": step.get("detail") or "—",
+                    }
+                )
     return rows
 
 

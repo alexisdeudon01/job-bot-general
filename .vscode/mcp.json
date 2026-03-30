@@ -1,0 +1,17 @@
+{
+	"servers": {
+		"io.github.ScrapeGraphAI/scrapegraph-mcp": {
+			"type": "stdio",
+			"command": "uvx",
+			"args": [
+				"scrapegraph-mcp@1.0.1"
+			],
+			"env": {
+				"SGAI_API_KEY": "sgai-2e6ca190-183c-4f81-aeb9-aaa28db58cc1"
+			},
+			"gallery": "https://api.mcp.github.com",
+			"version": "1.0.1"
+		}
+	},
+	"inputs": []
+}
