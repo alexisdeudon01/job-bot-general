@@ -1,11 +1,11 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from analyzer.domain.models import AnalyzerArtifacts
 from analyzer.services.llm import AnthropicLLMService
 from analyzer.services.nlp import NLPService
-from analyzer.services.scraper import scrape_job_offer
+from analyzer.services.scraper import scrape_job_offer, scrape_job_offer_structured
 from analyzer.utils.logging import log
 
 
@@ -64,6 +64,27 @@ def build_fallback_job_json(
     }
 
 
+def enrich_job_json_with_scraping_metadata(
+    job_json: Dict[str, Any],
+    job_url: str,
+    raw_job_text: str,
+    job_offer_structured: Optional[Dict[str, Any]],
+    scraping_source: Optional[str],
+) -> Dict[str, Any]:
+    enriched_job_json = dict(job_json)
+    source = dict(enriched_job_json.get("source") or {})
+    source.setdefault("job_url", job_url)
+    source["scraped_chars"] = len(raw_job_text)
+    source["scraping_source"] = scraping_source or "unknown"
+
+    if job_offer_structured:
+        source["scrapegraph_job_offer"] = job_offer_structured
+        enriched_job_json["job_offer_structured"] = job_offer_structured
+
+    enriched_job_json["source"] = source
+    return enriched_job_json
+
+
 class AnalyzerPipeline:
     def __init__(self, nlp_service: NLPService, llm_service: AnthropicLLMService):
         self.nlp_service = nlp_service
@@ -83,6 +104,8 @@ class AnalyzerPipeline:
     def run(self, job_url: str, cv_path: str = "/data/resume_europass.txt") -> AnalyzerArtifacts:
         cv_text = self.load_cv_text(cv_path)
         raw_job_text = scrape_job_offer(job_url)
+        job_offer_structured = scrape_job_offer_structured(job_url)
+        scraping_source = "scrapegraph" if job_offer_structured else "fallback_html"
         nlp_result = self.nlp_service.clean(raw_job_text)
 
         fallback_reason = None
@@ -121,6 +144,14 @@ class AnalyzerPipeline:
                     anthropic_model=self.llm_service.current_model_id(),
                 )
 
+        job_json = enrich_job_json_with_scraping_metadata(
+            job_json=job_json,
+            job_url=job_url,
+            raw_job_text=raw_job_text,
+            job_offer_structured=job_offer_structured,
+            scraping_source=scraping_source,
+        )
+
         return AnalyzerArtifacts(
             job_url=job_url,
             cv_text=cv_text,
@@ -129,6 +160,8 @@ class AnalyzerPipeline:
             cv_analysis=cv_analysis,
             job_json=job_json,
             fallback_reason=fallback_reason,
+            job_offer_structured=job_offer_structured,
+            scraping_source=scraping_source,
         )
 
     def write_output(self, job_json: Dict[str, Any], output_path: str = "/output/job_data.json") -> None:
