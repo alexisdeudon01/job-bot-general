@@ -328,6 +328,171 @@ def render_logs_panel():
         st.caption(f"Dernier rafraîchissement : {st.session_state.last_refresh_at}")
 
 
+def render_text_diagrams():
+    with st.container(border=True):
+        st.subheader("Diagrammes textuels du système")
+        st.caption("Vue d'ensemble lisible directement dans le dashboard, sans Mermaid et sans dépendance externe.")
+
+        diagram_col1, diagram_col2 = st.columns(2)
+
+        with diagram_col1:
+            st.markdown("**1) Architecture globale**")
+            st.code(
+                """[Utilisateur]
+     |
+     v
++-----------------------+
+| Dashboard Streamlit   |
+| dashboard/app.py      |
++-----------------------+
+   |        |        |
+   |        |        +--> Lit /output/*.json
+   |        |
+   |        +--> Lance analyzer/main.py
+   |        |
+   |        +--> Lance generator/main.py
+   |
+   +--> Lit /data/cv.pdf ou /data/resume_europass.txt
+   +--> Lit variables d'environnement IA
+
++-------------------+      +-------------------+
+| analyzer/main.py  | ---> | /output/job_data  |
++-------------------+      +-------------------+
+
++-------------------+      +-----------------------------+
+| generator/main.py | ---> | /output/generation_results  |
++-------------------+      +-----------------------------+
+
++-------------------+
+| mcp_server/main.py|
++-------------------+
+   |
+   +--> Expose la logique MCP
+   +--> Orchestre des composants/outils
+   +--> Dialogue avec services IA externes
+
++-------------------+      +-------------------+
+| Anthropic API     |      | OpenAI API        |
++-------------------+      +-------------------+""",
+                language="text",
+            )
+
+        with diagram_col2:
+            st.markdown("**2) Pipeline d'activité / exécution**")
+            st.code(
+                """[1] Dépôt du CV
+    |
+    +--> /data/cv.pdf
+    `--> /data/resume_europass.txt
+
+[2] Saisie de JOB_URL dans le dashboard
+    |
+    v
+[3] Bouton "Analyser"
+    |
+    v
+dashboard/app.py
+    |
+    `--> subprocess -> analyzer/main.py
+                     |
+                     +--> lit CV + JOB_URL
+                     +--> appelle éventuellement un provider IA
+                     `--> écrit /output/job_data.json
+
+[4] Contrôle visuel dans le dashboard
+    |
+    +--> statut fichiers
+    +--> structure JSON
+    `--> logs d'exécution
+
+[5] Bouton "Générer Europass"
+    |
+    v
+dashboard/app.py
+    |
+    `--> subprocess -> generator/main.py
+                     |
+                     +--> lit /output/job_data.json
+                     `--> écrit /output/generation_results.json
+
+[6] Restitution finale
+    |
+    +--> JSON affiché
+    +--> progression mise à jour
+    `--> historique d'exécution visible""",
+                language="text",
+            )
+
+        st.markdown("**3) Détail MCP : composants internes et externes**")
+        mcp_col1, mcp_col2 = st.columns([1.2, 1])
+
+        with mcp_col1:
+            st.code(
+                """                    +----------------------------------+
+                    |         Clients / Appels           |
+                    | dashboard, scripts, outils externes|
+                    +----------------+-------------------+
+                                     |
+                                     v
+                         +-----------+------------+
+                         |   mcp_server/main.py   |
+                         | Point d'entrée MCP     |
+                         +-----------+------------+
+                                     |
+                  +------------------+------------------+
+                  |                                     |
+                  v                                     v
+        +---------+----------+               +----------+---------+
+        | Routage requêtes   |               | Gestion contexte   |
+        | outils / ressources|               | paramètres / état  |
+        +---------+----------+               +----------+---------+
+                  |                                     |
+                  +------------------+------------------+
+                                     |
+                                     v
+                         +-----------+------------+
+                         |  Couche d'orchestration|
+                         |  appels métiers / LLM  |
+                         +-----------+------------+
+                                     |
+             +-----------------------+------------------------+
+             |                        |                       |
+             v                        v                       v
+   +---------+---------+   +----------+----------+   +--------+---------+
+   | Lecture fichiers  |   | Appels providers IA |   | Sorties / réponses|
+   | /data /output     |   | Anthropic / OpenAI  |   | JSON / payload MCP |
+   +-------------------+   +---------------------+   +-------------------+""",
+                language="text",
+            )
+
+        with mcp_col2:
+            st.markdown(
+                """
+- **Composants internes MCP**
+  - point d'entrée serveur
+  - routage des commandes MCP
+  - orchestration métier
+  - lecture des fichiers locaux
+  - préparation des réponses structurées
+
+- **Dépendances externes**
+  - variables d'environnement `ANTHROPIC_API_KEY`
+  - variables d'environnement `OPENAI_API_KEY`
+  - APIs LLM distantes
+  - fichiers montés dans `/data` et `/output`
+
+- **Flux principal**
+  1. un client appelle le serveur MCP
+  2. le serveur valide la requête
+  3. le serveur lit le contexte local utile
+  4. le serveur interroge éventuellement un provider IA
+  5. le serveur renvoie un résultat structuré
+                """
+            )
+
+        st.caption("Ces schémas sont documentaires : ils complètent l'observabilité existante du dashboard sans modifier le pipeline.")
+
+
 def main():
     init_session_state()
 
@@ -479,6 +644,9 @@ def main():
                 },
                 expanded=True,
             )
+
+    st.divider()
+    render_text_diagrams()
 
     render_logs_panel()
 
