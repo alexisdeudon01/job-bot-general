@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 import streamlit as st
 
-from dashboard.components.sections import render_section_header
-from dashboard.pages import (
-    render_entities_page,
-    render_github_actions_page,
-    render_llm_history_page,
-    render_overview_page,
-    render_runs_page,
-)
 from dashboard.services.api_client import ApiClient
 
 st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
@@ -20,131 +13,91 @@ st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
 def init_session_state() -> None:
     if "dashboard_last_refresh_at" not in st.session_state:
         st.session_state.dashboard_last_refresh_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if "dashboard_auto_refresh" not in st.session_state:
-        st.session_state.dashboard_auto_refresh = False
-    if "dashboard_refresh_interval" not in st.session_state:
-        st.session_state.dashboard_refresh_interval = 10
+    if "pipeline_last_result" not in st.session_state:
+        st.session_state.pipeline_last_result = None
+    if "job_url_input" not in st.session_state:
+        st.session_state.job_url_input = ""
+    if "cv_pdf_input" not in st.session_state:
+        st.session_state.cv_pdf_input = "data/cv.pdf"
 
 
-def render_sidebar() -> tuple[str, ApiClient]:
-    st.sidebar.title("Job Bot Control Tower")
-    st.sidebar.caption("Dashboard modulaire orienté API, observabilité, historique IA et orchestration.")
-
-    api_base_url = st.sidebar.text_input(
-        "Base URL API",
-        value=ApiClient().base_url,
-        help="URL de l'orchestrateur FastAPI. Exemple: http://localhost:8000",
-    )
-
-    client = ApiClient(base_url=api_base_url)
-
-    pages = {
-        "Overview": "Vue d’ensemble",
-        "Entities": "Entités / OSINT / conformité",
-        "Runs": "Pipeline runs / flux live",
-        "GitHub Actions": "GitHub Actions",
-        "LLM History": "Historique IA",
-    }
-
-    selected_page = st.sidebar.radio(
-        "Navigation",
-        options=list(pages.keys()),
-        format_func=lambda key: pages[key],
-    )
-
-    st.sidebar.divider()
-    st.sidebar.write("**Connectivité**")
-    health = client.fetch_health()
-    status = health.get("status", "unknown")
-    if status == "ok":
-        st.sidebar.success("API orchestrateur disponible")
-    elif status == "unreachable":
-        st.sidebar.warning("API indisponible, mode fallback")
-    else:
-        st.sidebar.info(f"État API : {status}")
-
-    auto_refresh = st.sidebar.toggle("Auto-refresh (UI)", value=st.session_state.dashboard_auto_refresh)
-    st.session_state.dashboard_auto_refresh = auto_refresh
-    st.session_state.dashboard_refresh_interval = st.sidebar.slider(
-        "Intervalle refresh (sec)",
-        min_value=5,
-        max_value=60,
-        value=int(st.session_state.dashboard_refresh_interval),
-        step=5,
-    )
-
-    if st.sidebar.button("Rafraîchir maintenant", use_container_width=True):
-        st.session_state.dashboard_last_refresh_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        st.rerun()
-
-    st.sidebar.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
-
-    return selected_page, client
+def _extract_steps(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return result.get("steps", []) if isinstance(result, dict) else []
 
 
-def render_header() -> None:
-    st.title("🚀 Job Bot General — Control Tower")
-    st.caption(
-        "Cockpit API-first pour le pipeline CV ↔ offre ↔ IA, les entités métier, les runs temps réel, "
-        "les historiques LLM et les workflows GitHub Actions."
-    )
+def _render_step(step: dict[str, Any], idx: int) -> None:
+    name = step.get("step", f"step_{idx}")
+    status = step.get("status", "unknown")
+    detail = step.get("detail", "")
+    output = step.get("output", {})
 
-
-def render_footer() -> None:
-    st.divider()
-    render_section_header(
-        "Architecture cible",
-        "Le dashboard ne pilote plus directement des scripts locaux : il devient un client visuel de l’orchestrateur FastAPI "
-        "et des microservices analyzer / generator / MCP.",
-    )
-    st.code(
-        """[Streamlit Dashboard]
-      |
-      +--> GET /health
-      +--> GET /api/v1/dashboard/overview
-      +--> GET /api/v1/providers/status
-      +--> GET /api/v1/pipeline/runs
-      +--> POST /api/v1/pipeline/analyze
-      +--> POST /api/v1/pipeline/generate
-      +--> POST /api/v1/pipeline/full
-      `--> GET /api/v1/github-actions/runs
-
-[FastAPI Orchestrator]
-      |
-      +--> PostgreSQL
-      +--> Redis
-      +--> analyzer service
-      +--> generator service
-      `--> mcp adapter""",
-        language="text",
-    )
-    st.info("Dashboard prêt — interface modulaire orientée observabilité, données et orchestration.")
+    icon = "✅" if status == "completed" else ("❌" if status == "failed" else "⏳")
+    st.markdown(f"### {icon} {idx}. {name}")
+    if detail:
+        st.caption(detail)
+    with st.expander("Output", expanded=False):
+        st.json(output)
 
 
 def main() -> None:
     init_session_state()
-    selected_page, client = render_sidebar()
 
-    render_header()
+    st.title("Pipeline candidature (simple)")
+    st.caption("Entrer seulement l'URL du post et le CV PDF, puis lancer le pipeline MCP.")
 
-    if selected_page == "Overview":
-        render_overview_page(client)
-    elif selected_page == "Entities":
-        render_entities_page(client)
-    elif selected_page == "Runs":
-        render_runs_page(client)
-    elif selected_page == "GitHub Actions":
-        render_github_actions_page(client)
-    elif selected_page == "LLM History":
-        render_llm_history_page(client)
+    client = ApiClient()
 
-    render_footer()
-
-    if st.session_state.dashboard_auto_refresh:
-        st.caption(
-            f"Auto-refresh activé ({st.session_state.dashboard_refresh_interval}s). "
-            "Utiliser le rerun intégré du navigateur/Streamlit si nécessaire pendant la phase transitoire."
+    with st.container(border=True):
+        st.subheader("Entrées")
+        st.session_state.job_url_input = st.text_input(
+            "URL du post",
+            value=st.session_state.job_url_input,
+            placeholder="https://company.com/jobs/123",
         )
+        st.session_state.cv_pdf_input = st.text_input(
+            "Chemin CV PDF",
+            value=st.session_state.cv_pdf_input,
+            placeholder="data/cv.pdf",
+        )
+
+        run_clicked = st.button("Lancer pipeline 12 étapes", type="primary", use_container_width=True)
+
+    if run_clicked:
+        payload = {
+            "source": "dashboard",
+            "payload": {
+                "job_url": st.session_state.job_url_input.strip(),
+                "cv_pdf_path": st.session_state.cv_pdf_input.strip(),
+            },
+            "options": {"mode": "mcp_first"},
+        }
+        result = client.post_json("/api/v1/pipeline/full", payload=payload, fallback={"status": "failed", "steps": []})
+        st.session_state.pipeline_last_result = result
+        st.session_state.dashboard_last_refresh_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    st.divider()
+    st.subheader("Actions / étapes du pipeline")
+
+    result = st.session_state.pipeline_last_result
+    if not result:
+        st.info("Aucune exécution pour le moment.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Run ID", str(result.get("run_id", "—")))
+        col2.metric("Type", str(result.get("pipeline_type", "full")))
+        col3.metric("Status", str(result.get("status", "unknown")))
+
+        steps = _extract_steps(result)
+        if not steps:
+            st.warning("Aucune étape retournée.")
+        else:
+            for i, step in enumerate(steps, start=1):
+                _render_step(step, i)
+
+        with st.expander("Réponse brute", expanded=False):
+            st.json(result)
+
+    st.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
 
 
 if __name__ == "__main__":
