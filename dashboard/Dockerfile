@@ -9,14 +9,12 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt /tmp/requirements-root.txt
-COPY dashboard/requirements.txt /tmp/requirements-dashboard.txt
+COPY requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements-root.txt \
-    && pip install --no-cache-dir -r /tmp/requirements-dashboard.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
     && python -m spacy download fr_core_news_sm
 
 COPY . /app
 
-CMD ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
