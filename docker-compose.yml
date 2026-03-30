@@ -93,6 +93,21 @@ services:
       - ./output:/output
     restart: "no"
 
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    env_file: .env
+    profiles: ["batch"]
+    environment:
+      PYTHONPATH: /app
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./data:/data
+      - ./output:/output
+    restart: "no"
+
   mcp:
     build:
       context: .
