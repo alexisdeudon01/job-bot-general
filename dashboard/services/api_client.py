@@ -99,11 +99,6 @@ class ApiClient:
     def fetch_github_actions_runs(self) -> list[dict[str, Any]]:
         fallback: list[dict[str, Any]] = []
         return self.get_json("/api/v1/github-actions/runs", fallback=fallback) or fallback
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> 95144aa (kj)
 
     def fetch_dashboard_entities(self) -> dict[str, Any]:
         fallback = self.fetch_dashboard_overview().get("entities") or {
@@ -130,11 +125,7 @@ class ApiClient:
             "tools": [],
             "source": "overview_fallback",
         }
-<<<<<<< HEAD
-        return self.get_json("/api/v1/dashboard/mcp", fallback=fallback) or fallback
-=======
         return self.get_json("/api/v1/dashboard/mcp-status", fallback=fallback) or fallback
->>>>>>> 95144aa (kj)
 
     def fetch_dashboard_db_graph(self) -> dict[str, Any]:
         fallback = self.fetch_dashboard_overview().get("db_graph") or {
@@ -143,9 +134,4 @@ class ApiClient:
             "diagram": "",
             "source": "overview_fallback",
         }
-<<<<<<< HEAD
-        return self.get_json("/api/v1/dashboard/db-graph", fallback=fallback) or fallback
-=======
         return self.get_json("/api/v1/dashboard/db-schema", fallback=fallback) or fallback
->>>>>>> Stashed changes
->>>>>>> 95144aa (kj)

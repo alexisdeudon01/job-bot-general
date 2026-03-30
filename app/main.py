@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.health import router as health_router
 from app.api.routes.pipeline import router as pipeline_router
+from app.api.routes.providers import router as providers_router
 
 app = FastAPI(
     title="Job Bot General Orchestrator",
@@ -13,3 +14,4 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(dashboard_router)
 app.include_router(pipeline_router)
+app.include_router(providers_router)

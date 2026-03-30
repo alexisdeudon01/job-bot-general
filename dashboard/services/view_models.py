@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.formatters import format_datetime, format_number, format_status_label
+from dashboard.utils.formatters import format_datetime, format_number, format_status_label
 
 
 def build_overview_metrics(overview: dict[str, Any]) -> list[dict[str, str]]:

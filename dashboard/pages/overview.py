@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.metrics import render_metric_row, render_status_badges
-from components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
-from services.api_client import ApiClient
-from services.view_models import (
+from dashboard.components.metrics import render_metric_row, render_status_badges
+from dashboard.components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
+from dashboard.services.api_client import ApiClient
+from dashboard.services.view_models import (
     build_db_graph_diagram,
     build_db_graph_edges_table,
     build_db_graph_nodes_table,
