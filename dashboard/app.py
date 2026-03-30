@@ -5,7 +5,12 @@ from typing import Any
 
 import streamlit as st
 
-from dashboard.services.api_client import ApiClient
+from pages.entities import render_page as render_entities_page
+from pages.github_actions import render_page as render_github_actions_page
+from pages.llm_history import render_page as render_llm_history_page
+from pages.overview import render_page as render_overview_page
+from pages.runs import render_page as render_runs_page
+from services.api_client import ApiClient
 
 st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
 
@@ -19,6 +24,8 @@ def init_session_state() -> None:
         st.session_state.job_url_input = ""
     if "cv_pdf_input" not in st.session_state:
         st.session_state.cv_pdf_input = "data/cv.pdf"
+    if "dashboard_active_page" not in st.session_state:
+        st.session_state.dashboard_active_page = "app"
 
 
 def _extract_steps(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -39,13 +46,9 @@ def _render_step(step: dict[str, Any], idx: int) -> None:
         st.json(output)
 
 
-def main() -> None:
-    init_session_state()
-
-    st.title("Pipeline candidature (simple)")
+def _render_app_page(client: ApiClient) -> None:
+    st.title("Pipeline candidature")
     st.caption("Entrer seulement l'URL du post et le CV PDF, puis lancer le pipeline MCP.")
-
-    client = ApiClient()
 
     with st.container(border=True):
         st.subheader("Entrées")
@@ -66,8 +69,8 @@ def main() -> None:
         payload = {
             "source": "dashboard",
             "payload": {
-                "job_url": st.session_state.job_url_input.strip(),
-                "cv_pdf_path": st.session_state.cv_pdf_input.strip(),
+                "job_url": str(st.session_state.job_url_input or "").strip(),
+                "cv_pdf_path": str(st.session_state.cv_pdf_input or "").strip(),
             },
             "options": {"mode": "mcp_first"},
         }
@@ -97,6 +100,115 @@ def main() -> None:
         with st.expander("Réponse brute", expanded=False):
             st.json(result)
 
+
+def _render_schema_architecture_page() -> None:
+    st.title("Architecture BDD")
+    st.caption("Vue synthétique du modèle de données actuellement connu par le projet.")
+
+    st.markdown("### Entités principales")
+    st.code(
+        """organizations
+  └── job_posts
+        └── applications
+              └── pipeline_runs
+                    └── service_runs
+
+providers
+  └── llm_models
+        └── chat_sessions
+              └── chat_messages
+
+github_workflows
+  └── github_runs""",
+        language="text",
+    )
+
+    st.info(
+        "Cette vue est actuellement dérivée de la documentation et des pages dashboard existantes. "
+        "Aucun endpoint backend dédié au graphe BDD n'est encore exposé."
+    )
+
+    st.markdown("### Ce qu'il manque pour une vraie vue graphique")
+    st.markdown(
+        "- un endpoint backend exposant le schéma\n"
+        "- ou une génération Mermaid / Graphviz / ERD à partir des modèles SQLAlchemy\n"
+        "- ou un fichier de diagramme versionné dans `docs/`"
+    )
+
+
+def _render_mcp_page(client: ApiClient) -> None:
+    st.title("MCP / Providers")
+    st.caption("Visibilité opérationnelle minimale sur les providers et l'orchestration MCP.")
+
+    health = client.fetch_health()
+    providers = client.fetch_provider_status()
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Santé API")
+        st.json(health, expanded=False)
+
+    with col2:
+        st.subheader("Providers")
+        if providers:
+            st.dataframe(providers, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Aucun statut provider disponible depuis l'API.")
+
+    st.markdown("### Chaîne cible")
+    st.code(
+        """Dashboard Streamlit
+  └── FastAPI orchestrator
+        ├── providers status
+        ├── pipeline runs
+        ├── github actions
+        └── MCP server / tools (à exposer davantage)""",
+        language="text",
+    )
+
+
+def main() -> None:
+    init_session_state()
+    client = ApiClient()
+
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio(
+        "Onglets",
+        options=[
+            ("app", "App"),
+            ("overview", "Overview"),
+            ("entities", "Entités"),
+            ("runs", "Runs"),
+            ("llm_history", "Historique IA"),
+            ("github_actions", "GitHub Actions"),
+            ("schema", "Architecture BDD"),
+            ("mcp", "MCP"),
+        ],
+        format_func=lambda item: item[1],
+        index=0,
+    )[0]
+
+    st.session_state.dashboard_active_page = page
+
+    if page == "app":
+        _render_app_page(client)
+    elif page == "overview":
+        render_overview_page(client)
+    elif page == "entities":
+        render_entities_page(client)
+    elif page == "runs":
+        render_runs_page(client)
+    elif page == "llm_history":
+        render_llm_history_page(client)
+    elif page == "github_actions":
+        render_github_actions_page(client)
+    elif page == "schema":
+        _render_schema_architecture_page()
+    elif page == "mcp":
+        _render_mcp_page(client)
+
+    st.divider()
     st.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
 
 

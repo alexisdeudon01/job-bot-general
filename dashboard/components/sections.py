@@ -47,3 +47,17 @@ def render_json_section(title: str, payload: Any, caption: str | None = None) ->
         if caption:
             st.caption(caption)
         st.json(payload, expanded=False)
+
+
+def render_info_list(title: str, items: list[str], caption: str | None = None) -> None:
+    with st.container(border=True):
+        st.markdown(f"**{title}**")
+        if caption:
+            st.caption(caption)
+
+        if not items:
+            st.info("Aucune donnée disponible.")
+            return
+
+        for item in items:
+            st.markdown(f"- {item}")
