@@ -1,47 +1,118 @@
-
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: job_bot_general
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    env_file: .env
+    environment:
+      APP_ENV: docker
+      APP_DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/job_bot_general
+      REDIS_URL: redis://redis:6379/0
+      PYTHONPATH: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./data:/data
+      - ./output:/output
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
   dashboard:
-    build: ./dashboard
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
     env_file: .env
     environment:
       STREAMLIT_SERVER_RUN_ON_SAVE: "false"
+      DASHBOARD_API_BASE_URL: http://orchestrator:8000
+      PYTHONPATH: /app
+    command: streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port 8501
     ports:
       - "8501:8501"
     volumes:
+      - .:/app
       - ./data:/data
       - ./output:/output
-      - ./analyzer:/app/analyzer
-      - ./generator:/app/generator
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - orchestrator
     restart: unless-stopped
 
   analyzer:
-    build: ./analyzer
+    build:
+      context: .
+      dockerfile: analyzer/Dockerfile
     env_file: .env
     profiles: ["batch"]
+    environment:
+      PYTHONPATH: /app
+    working_dir: /app
     volumes:
+      - .:/app
       - ./data:/data
       - ./output:/output
     restart: "no"
 
   generator:
-    build: ./generator
+    build:
+      context: .
+      dockerfile: generator/Dockerfile
     env_file: .env
     profiles: ["batch"]
+    environment:
+      PYTHONPATH: /app
+    working_dir: /app
     volumes:
+      - .:/app
       - ./data:/data
       - ./output:/output
     restart: "no"
 
   mcp:
-    build: ./mcp_server
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
     env_file: .env
     profiles: ["mcp"]
+    environment:
+      ORCHESTRATOR_URL: http://orchestrator:8000
+      PYTHONPATH: /app
+    working_dir: /app
     volumes:
+      - .:/app
       - ./data:/data
       - ./output:/output
-      - ./mcp_server:/app
+    depends_on:
+      - orchestrator
     stdin_open: true
     tty: true
     restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
