@@ -47,6 +47,35 @@ Fichiers principaux attendus :
 - `output/job_data.json`
 - `output/generation_results.json`
 
+## Architecture MCP (OpenAI + Anthropic)
+
+Un serveur MCP dédié est disponible dans `mcp_server/`.
+
+Il expose déjà les outils suivants :
+
+- `europass_pdf_to_json` : conversion d'un CV Europass PDF vers JSON structuré
+- `job_url_to_json` : conversion d'une URL d'offre en JSON structuré
+- `career_strategy_openai` : stratégie carrière via OpenAI
+- `career_strategy_anthropic` : stratégie carrière via Anthropic
+- `career_strategy_dual` : exécution OpenAI + Anthropic
+- `career_pipeline_from_pdf_and_url` : pipeline complet PDF CV + URL offre -> pack final JSON
+
+Les modèles sont détectés dynamiquement via API (pas de hardcode modèle), avec adaptation automatique de `max_tokens` côté Anthropic.
+
+Lancement du serveur MCP :
+
+```bash
+docker compose --profile mcp up --build mcp
+```
+
+Ou en local :
+
+```bash
+cd mcp_server
+pip install -r requirements.txt
+python main.py
+```
+
 ## Remarque sur les logs dans le dashboard
 
 Le service `dashboard` monte le socket Docker en lecture seule (`/var/run/docker.sock`) afin de pouvoir consulter les logs des conteneurs et mieux afficher l'état d'exécution dans l'interface. Si votre environnement ne permet pas ce montage, le dashboard doit continuer à fonctionner, mais avec une visibilité réduite sur les logs temps réel.

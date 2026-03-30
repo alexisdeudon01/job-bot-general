@@ -13,6 +13,9 @@ load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 anthropic = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 _ANTHROPIC_MODEL_CACHE = None
+PROMPT_CHAR_PER_TOKEN_ESTIMATE = 4
+PROMPT_TOKEN_SAFETY_MARGIN = 600
+MIN_INPUT_TOKEN_BUDGET = 1200
 
 
 def log(message, level="INFO", stream=None):
@@ -82,6 +85,14 @@ def nlp_clean(text):
     return result
 
 
+def extract_positive_int_attribute(obj, attribute_names):
+    for attribute_name in attribute_names:
+        value = getattr(obj, attribute_name, None)
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
+
+
 def resolve_anthropic_model():
     global _ANTHROPIC_MODEL_CACHE
 
@@ -93,17 +104,31 @@ def resolve_anthropic_model():
 
     log("Découverte dynamique des modèles Anthropic disponibles via l'API...", "INFO")
     models_page = anthropic.models.list(limit=100)
-    available_models = []
-    for model in models_page.data:
-        model_id = getattr(model, "id", None)
-        if model_id:
-            available_models.append(model_id)
+    available_models = [model for model in models_page.data if getattr(model, "id", None)]
 
     if not available_models:
         raise RuntimeError("Aucun modèle Anthropic disponible pour cette clé API.")
 
-    _ANTHROPIC_MODEL_CACHE = available_models[0]
-    log(f"Modèle Anthropic sélectionné automatiquement (1er disponible) : {_ANTHROPIC_MODEL_CACHE}", "INFO")
+    selected_model = available_models[0]
+    _ANTHROPIC_MODEL_CACHE = {
+        "id": selected_model.id,
+        "output_token_limit": extract_positive_int_attribute(
+            selected_model,
+            ("output_token_limit", "max_output_tokens", "max_tokens", "max_completion_tokens"),
+        ),
+        "input_token_limit": extract_positive_int_attribute(
+            selected_model,
+            ("input_token_limit", "max_input_tokens", "context_window", "context_length"),
+        ),
+    }
+    log(
+        (
+            f"Modèle Anthropic sélectionné automatiquement (1er disponible) : {_ANTHROPIC_MODEL_CACHE['id']} "
+            f"(input_limit={_ANTHROPIC_MODEL_CACHE['input_token_limit']}, "
+            f"output_limit={_ANTHROPIC_MODEL_CACHE['output_token_limit']})"
+        ),
+        "INFO",
+    )
     return _ANTHROPIC_MODEL_CACHE
 
 
@@ -113,6 +138,32 @@ def infer_anthropic_max_tokens_from_error(error):
     if match:
         return int(match.group(1))
     return None
+
+
+def adapt_prompt_to_input_limit(prompt, input_token_limit, reserved_output_tokens):
+    if not input_token_limit:
+        return prompt
+
+    allowed_input_tokens = max(
+        MIN_INPUT_TOKEN_BUDGET,
+        input_token_limit - reserved_output_tokens - PROMPT_TOKEN_SAFETY_MARGIN,
+    )
+    max_chars = allowed_input_tokens * PROMPT_CHAR_PER_TOKEN_ESTIMATE
+
+    if len(prompt) <= max_chars:
+        return prompt
+
+    log(
+        (
+            f"Prompt tronqué automatiquement pour respecter la fenêtre d'entrée du modèle "
+            f"(longueur initiale={len(prompt)}, longueur max={max_chars})."
+        ),
+        "WARN",
+    )
+    return (
+        prompt[:max_chars]
+        + "\n\n[NOTE TECHNIQUE] Prompt tronqué automatiquement pour respecter la limite de contexte du modèle."
+    )
 
 
 def get_anthropic_client():
@@ -136,27 +187,44 @@ def extract_anthropic_text(response):
 
 def create_anthropic_message_with_adaptive_tokens(prompt, requested_max_tokens):
     anthropic_client = get_anthropic_client()
-    model_name = resolve_anthropic_model()
+    model_info = resolve_anthropic_model()
+    model_name = model_info["id"]
+    model_output_limit = model_info.get("output_token_limit")
+    effective_max_tokens = min(requested_max_tokens, model_output_limit) if model_output_limit else requested_max_tokens
+    adapted_prompt = adapt_prompt_to_input_limit(
+        prompt=prompt,
+        input_token_limit=model_info.get("input_token_limit"),
+        reserved_output_tokens=effective_max_tokens,
+    )
+
     try:
         response = anthropic_client.messages.create(
             model=model_name,
-            max_tokens=requested_max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+            max_tokens=effective_max_tokens,
+            messages=[{"role": "user", "content": adapted_prompt}],
         )
-        return response, model_name, requested_max_tokens
+        return response, model_name, effective_max_tokens
     except Exception as error:
         allowed_max_tokens = infer_anthropic_max_tokens_from_error(error)
         if not allowed_max_tokens:
             raise
 
         log(
-            f"Anthropic a refusé max_tokens={requested_max_tokens}. Nouvelle tentative avec la limite détectée: {allowed_max_tokens}.",
+            (
+                f"Anthropic a refusé max_tokens={effective_max_tokens}. "
+                f"Nouvelle tentative avec la limite détectée: {allowed_max_tokens}."
+            ),
             "WARN",
+        )
+        adapted_prompt = adapt_prompt_to_input_limit(
+            prompt=prompt,
+            input_token_limit=model_info.get("input_token_limit"),
+            reserved_output_tokens=allowed_max_tokens,
         )
         response = anthropic_client.messages.create(
             model=model_name,
             max_tokens=allowed_max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": adapted_prompt}],
         )
         return response, model_name, allowed_max_tokens
 
@@ -215,7 +283,7 @@ def build_fallback_job_json(url, raw_text, cv_text, nlp_result, cv_analysis, err
         },
         "debug": {
             "fallback_reason": error_message,
-            "anthropic_model": _ANTHROPIC_MODEL_CACHE or "auto-detect",
+            "anthropic_model": (_ANTHROPIC_MODEL_CACHE or {}).get("id", "auto-detect"),
             "llm_provider": "anthropic",
             "mode": "fallback",
         },

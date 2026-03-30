@@ -33,3 +33,15 @@ services:
       - ./data:/data
       - ./output:/output
     restart: "no"
+
+  mcp:
+    build: ./mcp_server
+    env_file: .env
+    profiles: ["mcp"]
+    volumes:
+      - ./data:/data
+      - ./output:/output
+      - ./mcp_server:/app
+    stdin_open: true
+    tty: true
+    restart: "no"
