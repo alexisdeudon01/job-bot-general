@@ -13,9 +13,19 @@ def build_generation_prompt(job_data: Dict[str, Any], original_cv: str) -> str:
 
     prompt_sections = [
         "Tu dois produire directement un CV Europass complet en français.",
+        "Respecte strictement les informations fournies dans le contexte et le CV original.",
         "N'ajoute aucune question.",
+        "N'ajoute aucun commentaire, avertissement, note, préface ou postface.",
         "N'indique pas que des informations manquent.",
-        "Si certaines données sont absentes, complète de manière professionnelle et cohérente.",
+        "N'utilise aucun placeholder de type [Nom], [Téléphone], [Email], [Ville] ou équivalent.",
+        "N'invente pas d'expérience, de diplôme, de compétence, de certification, de langue, de date, de lieu, d'entreprise ou de coordonnées non présents dans les données.",
+        "Si une information est absente, laisse la section sobre, neutre et professionnelle sans signaler l'absence.",
+        "Le résultat doit être directement exploitable comme CV final.",
+        "Utilise une structure claire de CV Europass avec des rubriques cohérentes.",
+        "Mets fortement en avant les éléments du profil les plus pertinents pour l'offre visée.",
+        "Reformule de manière professionnelle, précise et crédible, sans exagération ni contenu fictif.",
+        "Conserve une tonalité formelle, concise et orientée recrutement.",
+        "Retourne uniquement le contenu final du CV, sans balises Markdown, sans bloc de code et sans texte hors CV.",
         "",
         "=== CONTEXTE OFFRE ET CANDIDAT ===",
         json.dumps(
@@ -34,7 +44,7 @@ def build_generation_prompt(job_data: Dict[str, Any], original_cv: str) -> str:
         original_cv,
         "",
         "=== FORMAT ATTENDU ===",
-        "Retourne uniquement le CV final rédigé, prêt à être utilisé.",
+        "Retourne uniquement le CV final rédigé, prêt à être utilisé, au format texte clair.",
     ]
 
     return "\n".join(prompt_sections)
