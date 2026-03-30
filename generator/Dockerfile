@@ -8,13 +8,11 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt /tmp/requirements-root.txt
-COPY generator/requirements.txt /tmp/requirements-generator.txt
+COPY requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements-root.txt \
-    && pip install --no-cache-dir -r /tmp/requirements-generator.txt
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . /app
 
-CMD ["python", "generator/main.py"]
+CMD ["python", "main.py"]
