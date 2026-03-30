@@ -28,7 +28,7 @@ class NLPService:
         log(f"Préparation NLP du texte de l'offre ({len(text)} caractères bruts)...", "INFO")
 
         if self.model is None:
-            words = [word.strip(".,;:!?()[]{}"'") for word in text.lower().split()]
+            words = [word.strip(".,;:!?()[]{}\"'") for word in text.lower().split()]
             clean_tokens = [word for word in words if len(word) > 2]
             result = NLPResult(
                 clean_text=" ".join(clean_tokens[:800]),

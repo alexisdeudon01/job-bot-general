@@ -5,23 +5,20 @@ from typing import Any
 
 import streamlit as st
 
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
+from dashboard.pages.entities import render_page as render_entities_page
+from dashboard.pages.github_actions import render_page as render_github_actions_page
+from dashboard.pages.llm_history import render_page as render_llm_history_page
+from dashboard.pages.overview import render_page as render_overview_page
+from dashboard.pages.runs import render_page as render_runs_page
 from dashboard.services.api_client import ApiClient
-=======
->>>>>>> 95144aa (kj)
-from pages.entities import render_page as render_entities_page
-from pages.github_actions import render_page as render_github_actions_page
-from pages.llm_history import render_page as render_llm_history_page
-from pages.overview import render_page as render_overview_page
-from pages.runs import render_page as render_runs_page
-from services.api_client import ApiClient
-<<<<<<< HEAD
-=======
-from services.view_models import build_db_graph_diagram, build_db_graph_edges_table, build_db_graph_nodes_table, build_mcp_servers_table, build_mcp_summary_rows, build_mcp_tools_table
->>>>>>> Stashed changes
->>>>>>> 95144aa (kj)
+from dashboard.services.view_models import (
+    build_db_graph_diagram,
+    build_db_graph_edges_table,
+    build_db_graph_nodes_table,
+    build_mcp_servers_table,
+    build_mcp_summary_rows,
+    build_mcp_tools_table,
+)
 
 st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
 
@@ -111,44 +108,6 @@ def _render_app_page(client: ApiClient) -> None:
         with st.expander("Réponse brute", expanded=False):
             st.json(result)
 
-<<<<<<< HEAD
-
-def _render_schema_architecture_page() -> None:
-    st.title("Architecture BDD")
-    st.caption("Vue synthétique du modèle de données actuellement connu par le projet.")
-
-    st.markdown("### Entités principales")
-    st.code(
-        """organizations
-  └── job_posts
-        └── applications
-              └── pipeline_runs
-                    └── service_runs
-
-providers
-  └── llm_models
-        └── chat_sessions
-              └── chat_messages
-
-github_workflows
-  └── github_runs""",
-        language="text",
-    )
-
-    st.info(
-        "Cette vue est actuellement dérivée de la documentation et des pages dashboard existantes. "
-        "Aucun endpoint backend dédié au graphe BDD n'est encore exposé."
-    )
-
-    st.markdown("### Ce qu'il manque pour une vraie vue graphique")
-    st.markdown(
-        "- un endpoint backend exposant le schéma\n"
-        "- ou une génération Mermaid / Graphviz / ERD à partir des modèles SQLAlchemy\n"
-        "- ou un fichier de diagramme versionné dans `docs/`"
-    )
-=======
-<<<<<<< Updated upstream
-=======
 
 def _render_schema_architecture_page(client: ApiClient) -> None:
     st.title("Architecture BDD")
@@ -179,25 +138,10 @@ def _render_schema_architecture_page(client: ApiClient) -> None:
 
     with st.expander("Payload brut graphe BDD", expanded=False):
         st.json(db_graph)
->>>>>>> 95144aa (kj)
 
 
 def _render_mcp_page(client: ApiClient) -> None:
     st.title("MCP / Providers")
-<<<<<<< HEAD
-    st.caption("Visibilité opérationnelle minimale sur les providers et l'orchestration MCP.")
-
-    health = client.fetch_health()
-    providers = client.fetch_provider_status()
-
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.subheader("Santé API")
-        st.json(health, expanded=False)
-
-    with col2:
-=======
     st.caption("Vue détaillée des providers, serveurs MCP et outils exposés par l'API.")
 
     health = client.fetch_health()
@@ -211,18 +155,12 @@ def _render_mcp_page(client: ApiClient) -> None:
         st.json(health, expanded=False)
 
     with top_right:
->>>>>>> 95144aa (kj)
         st.subheader("Providers")
         if providers:
             st.dataframe(providers, use_container_width=True, hide_index=True)
         else:
             st.warning("Aucun statut provider disponible depuis l'API.")
 
-<<<<<<< HEAD
-    st.markdown("### Chaîne cible")
-    st.code(
-        """Dashboard Streamlit
-=======
     middle_left, middle_right = st.columns([1, 1])
 
     with middle_left:
@@ -251,16 +189,10 @@ def _render_mcp_page(client: ApiClient) -> None:
         st.subheader("Chaîne cible")
         st.code(
             """Dashboard Streamlit
->>>>>>> 95144aa (kj)
   └── FastAPI orchestrator
         ├── providers status
         ├── pipeline runs
         ├── github actions
-<<<<<<< HEAD
-        └── MCP server / tools (à exposer davantage)""",
-        language="text",
-    )
-=======
         ├── MCP servers
         └── MCP tools / calls""",
             language="text",
@@ -268,7 +200,6 @@ def _render_mcp_page(client: ApiClient) -> None:
 
     with st.expander("Payload brut MCP", expanded=False):
         st.json(mcp_payload)
->>>>>>> 95144aa (kj)
 
 
 def main() -> None:
@@ -307,19 +238,11 @@ def main() -> None:
     elif page == "github_actions":
         render_github_actions_page(client)
     elif page == "schema":
-<<<<<<< HEAD
-        _render_schema_architecture_page()
-=======
         _render_schema_architecture_page(client)
->>>>>>> 95144aa (kj)
     elif page == "mcp":
         _render_mcp_page(client)
 
     st.divider()
-<<<<<<< HEAD
-=======
->>>>>>> Stashed changes
->>>>>>> 95144aa (kj)
     st.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")
 
 

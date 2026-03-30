@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
-from services.api_client import ApiClient
-from services.view_models import build_entities_table, build_entity_record_sections, build_entity_relationship_rows
+from dashboard.components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
+from dashboard.services.api_client import ApiClient
+from dashboard.services.view_models import build_entities_table, build_entity_record_sections, build_entity_relationship_rows
 
 
 def _build_entity_notes(rows: list[dict[str, object]]) -> list[dict[str, object]]:

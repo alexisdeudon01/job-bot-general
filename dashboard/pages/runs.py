@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
-from services.api_client import ApiClient
-from services.view_models import build_runs_table, build_status_distribution
+from dashboard.components.sections import render_json_section, render_section_header, render_table_section, render_text_diagram
+from dashboard.services.api_client import ApiClient
+from dashboard.services.view_models import build_runs_table, build_status_distribution
 
 
 def _render_plotly_status_chart(distribution: list[dict[str, int]]) -> None:
