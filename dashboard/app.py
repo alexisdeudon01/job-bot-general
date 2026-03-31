@@ -7,6 +7,7 @@ from typing import Any
 import streamlit as st
 
 from dashboard.pages.diagrams import render_page as render_diagrams_page
+from dashboard.pages.diagnostics import render_page as render_diagnostics_page
 from dashboard.pages.entities import render_page as render_entities_page
 from dashboard.pages.github_actions import render_page as render_github_actions_page
 from dashboard.pages.live_logs import render_page as render_live_logs_page
@@ -532,6 +533,7 @@ def _render_mcp_page(client: ApiClient) -> None:
 PAGE_OPTIONS = [
     "Pilotage",
     "Vue d'ensemble",
+    "Diagnostics",
     "Entités",
     "Exécutions",
     "Historique IA",
@@ -572,6 +574,8 @@ def main() -> None:
         render_overview_page(client)
     elif page == "Entités":
         render_entities_page(client)
+    elif page == "Diagnostics":
+        render_diagnostics_page(client)
     elif page == "Exécutions":
         render_runs_page(client)
     elif page == "Historique IA":

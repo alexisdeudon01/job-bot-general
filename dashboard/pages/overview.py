@@ -30,6 +30,9 @@ def render_page(api_client: ApiClient | None = None) -> None:
         "Vue d'ensemble API-first",
         "Synthèse consolidée depuis l'orchestrateur FastAPI avec aperçus détaillés des runs, du MCP et du graphe BDD.",
     )
+    st.info(
+        "💡 Pour une analyse orientée bugs/redondances et qualité des données, utilisez la page **Diagnostics**."
+    )
     render_metric_row(build_overview_metrics(overview))
     render_status_badges(build_provider_cards(providers), title="Fournisseurs IA")
 
