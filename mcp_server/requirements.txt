@@ -1,9 +1,0 @@
-mcp
-openai
-openai-agents
-python-dotenv
-requests
-beautifulsoup4
-pypdf
-pdfplumber
-scrapegraph-py

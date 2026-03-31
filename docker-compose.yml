@@ -1,6 +1,8 @@
 services:
+  # ── Base de données ──────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: postgres:latest
+    container_name: db-postgres
     environment:
       POSTGRES_DB: job_bot_general
       POSTGRES_USER: postgres
@@ -9,8 +11,16 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mcp-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ── Orchestrateur FastAPI ────────────────────────────────────────────────────
   orchestrator:
     build:
       context: .
@@ -19,7 +29,7 @@ services:
     environment:
       APP_ENV: docker
       APP_DEBUG: "false"
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/job_bot_general
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/job_bot_general
       PYTHONPATH: /app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
@@ -29,9 +39,13 @@ services:
       - ./data:/data
       - ./output:/output
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    networks:
+      - mcp-net
     restart: unless-stopped
 
+  # ── Dashboard Streamlit ──────────────────────────────────────────────────────
   dashboard:
     build:
       context: .
@@ -51,8 +65,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - orchestrator
+    networks:
+      - mcp-net
     restart: unless-stopped
 
+  # ── Services batch ───────────────────────────────────────────────────────────
   analyzer:
     build:
       context: .
@@ -66,6 +83,8 @@ services:
       - .:/app
       - ./data:/data
       - ./output:/output
+    networks:
+      - mcp-net
     restart: "no"
 
   generator:
@@ -81,6 +100,8 @@ services:
       - .:/app
       - ./data:/data
       - ./output:/output
+    networks:
+      - mcp-net
     restart: "no"
 
   agent:
@@ -96,27 +117,47 @@ services:
       - .:/app
       - ./data:/data
       - ./output:/output
+    networks:
+      - mcp-net
     restart: "no"
 
-  mcp:
+  # ── MCP Host (nouvelle architecture top-down) ────────────────────────────────
+  mcp-host:
     build:
       context: .
-      dockerfile: mcp_server/Dockerfile
+      dockerfile: mcp_host/Dockerfile
+    container_name: mcp-host
     env_file: .env
     profiles: ["mcp"]
     environment:
-      ORCHESTRATOR_URL: http://orchestrator:8000
       PYTHONPATH: /app
+      # Connexion DB via le nom de service Docker (db)
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/job_bot_general
+      ORCHESTRATOR_URL: http://orchestrator:8000
+      # Chemin projet monté dans le container (pour le serveur filesystem)
+      PROJECT_ROOT: /app
     working_dir: /app
     volumes:
-      - .:/app
+      # Monte le projet complet en lecture/écriture (accès filesystem MCP)
+      - /home/tor/Downloads/job-bot-general:/app
       - ./data:/data
       - ./output:/output
     depends_on:
-      - orchestrator
+      postgres:
+        condition: service_healthy
+      orchestrator:
+        condition: service_started
+    networks:
+      - mcp-net
     stdin_open: true
     tty: true
     restart: "no"
 
 volumes:
   postgres_data:
+
+# ── Réseau interne MCP ────────────────────────────────────────────────────────
+networks:
+  mcp-net:
+    driver: bridge
+    name: mcp-net

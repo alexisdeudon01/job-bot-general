@@ -12,19 +12,43 @@
 			"gallery": "https://api.mcp.github.com",
 			"version": "1.0.1"
 		},
-		"filesystem": {
+		"job-bot-mcp-host": {
+			"type": "stdio",
+			"command": "python",
+			"args": [
+				"-m",
+				"mcp_host.main",
+				"--list-tools"
+			],
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}",
+				"OPENAI_API_KEY": "${input:openaiApiKey}",
+				"SGAI_API_KEY": "${input:sgaiApiKey}",
+				"GH_TOKEN": "${input:ghToken}",
+				"DATABASE_URL": "${input:databaseUrl}"
+			},
+			"description": "MCP Host local — Orchestrateur top-down (Postgres, Fetch, Filesystem, GitHub, ScrapeGraph)"
+		},
+		"modelcontextprotocol/fetch": {
+			"type": "stdio",
+			"command": "uvx",
+			"args": [
+				"mcp-server-fetch"
+			]
+		},
+		"modelcontextprotocol/filesystem": {
 			"type": "stdio",
 			"command": "npx",
 			"args": [
 				"-y",
 				"@modelcontextprotocol/server-filesystem",
-				"/home/tor/Downloads/job-bot-general",
-				"/home/tor/Downloads/job-bot-general/docs",
-				"/home/tor/Downloads/job-bot-general/data",
-				"/home/tor/Downloads/job-bot-general/output"
+				"${workspaceFolder}",
+				"${workspaceFolder}/data",
+				"${workspaceFolder}/output",
+				"${workspaceFolder}/docs"
 			]
 		},
-		"github": {
+		"modelcontextprotocol/github": {
 			"type": "stdio",
 			"command": "npx",
 			"args": [
@@ -32,43 +56,40 @@
 				"@modelcontextprotocol/server-github"
 			],
 			"env": {
-				"GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GH_TOKEN}"
+				"GITHUB_PERSONAL_ACCESS_TOKEN": "${input:ghToken}"
 			}
 		},
-		"postgres": {
+		"modelcontextprotocol/postgres": {
 			"type": "stdio",
 			"command": "npx",
 			"args": [
 				"-y",
-				"@modelcontextprotocol/server-postgres"
-			],
-			"env": {
-				"DATABASE_URL": "${env:DATABASE_URL}"
-			}
-		},
-		"fetch": {
-			"type": "stdio",
-			"command": "uvx",
-			"args": [
-				"mcp-server-fetch"
-			]
-		},
-		"memory": {
-			"type": "stdio",
-			"command": "npx",
-			"args": [
-				"-y",
-				"@modelcontextprotocol/server-memory"
-			]
-		},
-		"playwright": {
-			"type": "stdio",
-			"command": "npx",
-			"args": [
-				"-y",
-				"@playwright/mcp"
+				"@modelcontextprotocol/server-postgres",
+				"${input:databaseUrl}"
 			]
 		}
 	},
-	"inputs": []
+	"inputs": [
+		{
+			"id": "sgaiApiKey",
+			"type": "promptString",
+			"description": "ScrapeGraph API key (SGAI_API_KEY)"
+		},
+		{
+			"id": "openaiApiKey",
+			"type": "promptString",
+			"description": "OpenAI API key (OPENAI_API_KEY)"
+		},
+		{
+			"id": "ghToken",
+			"type": "promptString",
+			"description": "GitHub Personal Access Token (GH_TOKEN)"
+		},
+		{
+			"id": "databaseUrl",
+			"type": "promptString",
+			"description": "PostgreSQL URL (ex: postgresql://postgres:postgres@localhost:5432/job_bot_general)",
+			"default": "postgresql://postgres:postgres@localhost:5432/job_bot_general"
+		}
+	]
 }
