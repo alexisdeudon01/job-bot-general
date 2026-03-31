@@ -2,11 +2,23 @@ name: docker-publish-ghcr
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
+    paths:
+      - "app/**"
+      - "dashboard/**"
+      - "mcp_host/**"
+      - "requirements.txt"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-publish-ghcr.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+
+concurrency:
+  group: docker-publish-ghcr-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
@@ -15,32 +27,47 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        service: [analyzer, generator, dashboard]
+        image:
+          - name: orchestrator
+            dockerfile: app/Dockerfile
+          - name: dashboard
+            dockerfile: dashboard/Dockerfile
+          - name: mcp-host
+            dockerfile: mcp_host/Dockerfile
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract metadata for ${{ matrix.image.name }}
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/job-bot-general-${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/job-bot-general-${{ matrix.image.name }}
           tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
             type=sha
 
-      - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v7
+      - name: Build and push ${{ matrix.image.name }}
+        uses: docker/build-push-action@v6
         with:
-          context: ./${{ matrix.service }}
+          context: .
+          file: ${{ matrix.image.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

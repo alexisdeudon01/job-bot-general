@@ -24,7 +24,7 @@ services:
   orchestrator:
     build:
       context: .
-      dockerfile: dashboard/Dockerfile
+      dockerfile: app/Dockerfile
     env_file: .env
     environment:
       APP_ENV: docker
