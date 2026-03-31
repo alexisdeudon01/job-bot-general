@@ -113,19 +113,32 @@ class PipelineService:
                 except Exception as exc:
                     scrape_detail = f"OpenAI Agents+MCP scrape failed: {str(exc)[:150]}"
 
-            # Fallback: direct ScrapeGraph SDK call (no OpenAI Agents)
+            # Fallback: direct scrapegraph-py SDK call (no OpenAI Agents)
             if not agents_scrape_ok:
                 try:
-                    from mcp_server.services.scrapegraph_service import (
-                        ScrapeGraphService,
-                    )
+                    from scrapegraphai.graphs import SmartScraperGraph  # type: ignore[import]
 
-                    sg = ScrapeGraphService()
-                    result = sg.markdownify_job_page(job_url)
-                    job_content = result.get("markdown", "")
-                    scrape_tool = "scrapegraph.markdownify (direct SDK fallback)"
+                    graph = SmartScraperGraph(
+                        prompt="Extract the full markdown content of this job posting page.",
+                        source=job_url,
+                        config={
+                            "llm": {
+                                "api_key": os.getenv("SGAI_API_KEY", ""),
+                                "model": "openai/gpt-4o-mini",
+                            }
+                        },
+                    )
+                    result = graph.run()
+                    job_content = (
+                        result.get("markdown", "")
+                        if isinstance(result, dict)
+                        else str(result)
+                    )
+                    scrape_tool = (
+                        "scrapegraphai.SmartScraperGraph (direct SDK fallback)"
+                    )
                     scrape_status = "completed"
-                    scrape_detail = f"Job page scraped via ScrapeGraph direct SDK ({len(job_content)} chars)"
+                    scrape_detail = f"Job page scraped via ScrapeGraphAI direct SDK ({len(job_content)} chars)"
                 except Exception as exc2:
                     scrape_status = "failed"
                     scrape_tool = "scrapegraph.markdownify"

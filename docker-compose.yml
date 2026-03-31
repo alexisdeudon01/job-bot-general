@@ -69,58 +69,6 @@ services:
       - mcp-net
     restart: unless-stopped
 
-  # ── Services batch ───────────────────────────────────────────────────────────
-  analyzer:
-    build:
-      context: .
-      dockerfile: analyzer/Dockerfile
-    env_file: .env
-    profiles: ["batch"]
-    environment:
-      PYTHONPATH: /app
-    working_dir: /app
-    volumes:
-      - .:/app
-      - ./data:/data
-      - ./output:/output
-    networks:
-      - mcp-net
-    restart: "no"
-
-  generator:
-    build:
-      context: .
-      dockerfile: generator/Dockerfile
-    env_file: .env
-    profiles: ["batch"]
-    environment:
-      PYTHONPATH: /app
-    working_dir: /app
-    volumes:
-      - .:/app
-      - ./data:/data
-      - ./output:/output
-    networks:
-      - mcp-net
-    restart: "no"
-
-  agent:
-    build:
-      context: .
-      dockerfile: agent/Dockerfile
-    env_file: .env
-    profiles: ["batch"]
-    environment:
-      PYTHONPATH: /app
-    working_dir: /app
-    volumes:
-      - .:/app
-      - ./data:/data
-      - ./output:/output
-    networks:
-      - mcp-net
-    restart: "no"
-
   # ── MCP Host (nouvelle architecture top-down) ────────────────────────────────
   mcp-host:
     build:
