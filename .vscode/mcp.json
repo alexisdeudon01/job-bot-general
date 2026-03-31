@@ -32,7 +32,7 @@
 				"@modelcontextprotocol/server-github"
 			],
 			"env": {
-				"GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+				"GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GH_TOKEN}"
 			}
 		},
 		"postgres": {
@@ -40,9 +40,11 @@
 			"command": "npx",
 			"args": [
 				"-y",
-				"@modelcontextprotocol/server-postgres",
-				"${input:postgresConnectionString}"
-			]
+				"@modelcontextprotocol/server-postgres"
+			],
+			"env": {
+				"DATABASE_URL": "${env:DATABASE_URL}"
+			}
 		},
 		"fetch": {
 			"type": "stdio",
@@ -68,11 +70,5 @@
 			]
 		}
 	},
-	"inputs": [
-		{
-			"id": "postgresConnectionString",
-			"type": "promptString",
-			"description": "PostgreSQL connection string, e.g. postgresql://user:password@host:5432/dbname"
-		}
-	]
+	"inputs": []
 }

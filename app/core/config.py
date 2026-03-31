@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     app_debug: bool = Field(default=False)
     api_v1_prefix: str = Field(default="/api/v1")
 
-    database_url: str = Field(default="postgresql+psycopg://postgres:postgres@localhost:5432/job_bot_general")
+    database_url: str = Field(
+        default="postgresql+psycopg://postgres:postgres@localhost:5432/job_bot_general",
+        alias="DATABASE_URL",
+    )
     github_repository: str | None = Field(default=None)
-    github_token: str | None = Field(default=None)
+    github_token: str | None = Field(default=None, alias="GH_TOKEN")
 
     openai_api_key: str | None = Field(default=None)
     scrapegraph_api_key: str | None = Field(default=None, alias="SGAI_API_KEY")
