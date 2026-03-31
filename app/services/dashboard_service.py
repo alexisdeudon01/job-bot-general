@@ -599,7 +599,10 @@ class DashboardService:
         fallback_graph = self._fallback_db_schema_graph()
 
         def _query(db: Session) -> dict[str, Any]:
-            inspector = inspect(db.bind)
+            bind = db.get_bind()
+            if bind is None:
+                raise RuntimeError("No database bind available for schema inspection")
+            inspector = inspect(bind)
             table_names = sorted(inspector.get_table_names())
             nodes = []
             edges = []

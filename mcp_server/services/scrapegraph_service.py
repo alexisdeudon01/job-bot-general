@@ -404,7 +404,7 @@ class ScrapeGraphService:
             result = self._client.smartscraper(
                 website_url=url,
                 user_prompt=user_prompt,
-                output_schema=output_schema,
+                output_schema=output_schema,  # type: ignore[arg-type]
             )
             return {"url": url, "result": result}
         except Exception as exc:

@@ -4,10 +4,16 @@ import asyncio
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from agents import Agent, Runner
 from agents.mcp import MCPServerSse, MCPServerStdio, MCPServerStreamableHttp
+from agents.mcp.server import (
+    MCPServer,
+    MCPServerSseParams,
+    MCPServerStdioParams,
+    MCPServerStreamableHttpParams,
+)
 
 MCPTransport = Literal["stdio", "sse", "streamable_http"]
 
@@ -210,16 +216,16 @@ class OpenAIAgentsService:
                 raise ValueError(
                     f"MCPServerConfig '{config.name}' has transport='stdio' but no stdio config."
                 )
-            params: dict[str, Any] = {
+            stdio_params: MCPServerStdioParams = {
                 "command": config.stdio.command,
                 "args": config.stdio.args,
             }
             if config.stdio.env:
-                params["env"] = config.stdio.env
+                stdio_params["env"] = config.stdio.env
             if config.stdio.cwd:
-                params["cwd"] = config.stdio.cwd
+                stdio_params["cwd"] = config.stdio.cwd
             return MCPServerStdio(
-                params=params,
+                params=stdio_params,
                 cache_tools_list=config.cache_tools_list,
                 name=config.name,
             )
@@ -229,13 +235,13 @@ class OpenAIAgentsService:
                 raise ValueError(
                     f"MCPServerConfig '{config.name}' has transport='sse' but no sse config."
                 )
-            params = {"url": config.sse.url}
+            sse_params: MCPServerSseParams = {"url": config.sse.url}
             if config.sse.headers:
-                params["headers"] = config.sse.headers
-            params["timeout"] = config.sse.timeout
-            params["sse_read_timeout"] = config.sse.sse_read_timeout
+                sse_params["headers"] = config.sse.headers
+            sse_params["timeout"] = config.sse.timeout
+            sse_params["sse_read_timeout"] = config.sse.sse_read_timeout
             return MCPServerSse(
-                params=params,
+                params=sse_params,
                 cache_tools_list=config.cache_tools_list,
                 name=config.name,
             )
@@ -246,14 +252,18 @@ class OpenAIAgentsService:
                     f"MCPServerConfig '{config.name}' has transport='streamable_http' "
                     "but no streamable_http config."
                 )
-            params = {"url": config.streamable_http.url}
+            http_params: MCPServerStreamableHttpParams = {
+                "url": config.streamable_http.url
+            }
             if config.streamable_http.headers:
-                params["headers"] = config.streamable_http.headers
-            params["timeout"] = config.streamable_http.timeout
-            params["sse_read_timeout"] = config.streamable_http.sse_read_timeout
-            params["terminate_on_close"] = config.streamable_http.terminate_on_close
+                http_params["headers"] = config.streamable_http.headers
+            http_params["timeout"] = config.streamable_http.timeout
+            http_params["sse_read_timeout"] = config.streamable_http.sse_read_timeout
+            http_params["terminate_on_close"] = (
+                config.streamable_http.terminate_on_close
+            )
             return MCPServerStreamableHttp(
-                params=params,
+                params=http_params,
                 cache_tools_list=config.cache_tools_list,
                 name=config.name,
                 max_retry_attempts=config.max_retry_attempts,
@@ -310,7 +320,7 @@ class OpenAIAgentsService:
                 name="job-bot-agent",
                 instructions=effective_instructions,
                 model=effective_model,
-                mcp_servers=active_servers,
+                mcp_servers=cast(list[MCPServer], active_servers),
             )
             result = await Runner.run(agent, prompt)
             return {
