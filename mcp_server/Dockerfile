@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PYTHONPATH=/app
+ENV LLM_RUNTIME_CONTEXT=python-services
 
 WORKDIR /app
 

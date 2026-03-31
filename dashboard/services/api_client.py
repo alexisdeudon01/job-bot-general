@@ -1,21 +1,30 @@
 from __future__ import annotations
 
+import logging
 import os
+from copy import deepcopy
 from typing import Any
+
+from dashboard.services.api_routes import ROUTES
 
 try:
     import httpx
-except ImportError:  # pragma: no cover - dépendance optionnelle en phase de refonte
+except ImportError:  # pragma: no cover - optional dependency during refactors
     httpx = None  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_API_BASE_URL = os.getenv("DASHBOARD_API_BASE_URL", "http://localhost:8000")
 
 
 class ApiClient:
+    """Thin route-driven dashboard API client with minimal fallback support."""
+
     def __init__(self, base_url: str | None = None, timeout: float = 10.0):
         self.base_url = (base_url or DEFAULT_API_BASE_URL).rstrip("/")
         self.timeout = timeout
+        self._overview_cache: dict[str, Any] | None = None
 
     def is_available(self) -> bool:
         return httpx is not None
@@ -24,114 +33,62 @@ class ApiClient:
         clean_path = path if path.startswith("/") else f"/{path}"
         return f"{self.base_url}{clean_path}"
 
-    def get_json(self, path: str, fallback: Any = None) -> Any:
+    def _clone_fallback(self, fallback: Any) -> Any:
+        if fallback is None:
+            return None
+        return deepcopy(fallback)
+
+    def _request_json(self, path: str, fallback: Any = None) -> Any:
+        fallback_payload = self._clone_fallback(fallback)
         if httpx is None:
-            return fallback
+            return fallback_payload
 
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.get(self.build_url(path))
                 response.raise_for_status()
                 return response.json()
-        except Exception:
-            return fallback
-
-    def post_json(self, path: str, payload: dict[str, Any] | None = None, fallback: Any = None) -> Any:
-        if httpx is None:
-            return fallback
-
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(self.build_url(path), json=payload or {})
-                response.raise_for_status()
-                return response.json()
-        except Exception:
-            return fallback
+        except (httpx.HTTPError, httpx.TimeoutException, ValueError) as exc:
+            logger.warning("Failed to fetch dashboard API path %s: %s", path, exc)
+            return fallback_payload
 
     def fetch_health(self) -> dict[str, Any]:
-        return self.get_json("/health", fallback={"status": "unreachable", "source": "fallback"}) or {}
+        fallback = {"status": "unreachable", "source": "fallback"}
+        return self._request_json(ROUTES.health, fallback=fallback) or deepcopy(fallback)
 
     def fetch_dashboard_overview(self) -> dict[str, Any]:
-        fallback = {
-            "generated_at": None,
-            "status": "fallback",
-            "metrics": [
-                {"key": "organizations", "label": "Organisations", "value": 0},
-                {"key": "job_posts", "label": "Offres", "value": 0},
-                {"key": "applications", "label": "Candidatures", "value": 0},
-                {"key": "pipeline_runs", "label": "Runs pipeline", "value": 0},
-            ],
-            "services": [],
-            "recent_pipeline_runs": [],
-            "recent_github_runs": [],
-            "entities": {
-                "summary": [],
-                "relationships": [],
-                "records": {},
-            },
-            "llm_history": {
-                "summary": [],
-                "recent_messages": [],
-                "sessions": [],
-            },
-            "mcp": {
-                "summary": [],
-                "servers": [],
-                "tools": [],
-            },
-            "db_graph": {
-                "nodes": [],
-                "edges": [],
-                "diagram": "",
-            },
-            "source": "fallback",
-        }
-        return self.get_json("/api/v1/dashboard/overview", fallback=fallback) or fallback
+        if self._overview_cache is not None:
+            return deepcopy(self._overview_cache)
+
+        fallback = {"metrics": [], "services": [], "recent_pipeline_runs": [], "recent_github_runs": [], "source": "fallback"}
+        data = self._request_json(ROUTES.overview, fallback=fallback) or deepcopy(fallback)
+        self._overview_cache = deepcopy(data)
+        return data
 
     def fetch_pipeline_runs(self) -> dict[str, Any]:
         fallback = {"runs": [], "total": 0, "source": "fallback"}
-        return self.get_json("/api/v1/pipeline/runs", fallback=fallback) or fallback
+        return self._request_json(ROUTES.pipeline_runs, fallback=fallback) or deepcopy(fallback)
 
     def fetch_provider_status(self) -> list[dict[str, Any]]:
         fallback: list[dict[str, Any]] = []
-        return self.get_json("/api/v1/providers/status", fallback=fallback) or fallback
+        return self._request_json(ROUTES.provider_status, fallback=fallback) or []
 
-    def fetch_github_actions_runs(self) -> list[dict[str, Any]]:
+    def fetch_github_actions_runs(self) -> list[dict[str, Any]] | dict[str, Any]:
         fallback: list[dict[str, Any]] = []
-        return self.get_json("/api/v1/github-actions/runs", fallback=fallback) or fallback
+        return self._request_json(ROUTES.github_actions_runs, fallback=fallback) or []
 
     def fetch_dashboard_entities(self) -> dict[str, Any]:
-        fallback = self.fetch_dashboard_overview().get("entities") or {
-            "summary": [],
-            "relationships": [],
-            "records": {},
-            "source": "overview_fallback",
-        }
-        return self.get_json("/api/v1/dashboard/entities", fallback=fallback) or fallback
+        fallback = {"summary": [], "relationships": [], "records": {}, "source": "fallback"}
+        return self._request_json(ROUTES.entities, fallback=fallback) or deepcopy(fallback)
 
     def fetch_dashboard_llm_history(self) -> dict[str, Any]:
-        fallback = self.fetch_dashboard_overview().get("llm_history") or {
-            "summary": [],
-            "recent_messages": [],
-            "sessions": [],
-            "source": "overview_fallback",
-        }
-        return self.get_json("/api/v1/dashboard/llm-history", fallback=fallback) or fallback
+        fallback = {"summary": [], "recent_messages": [], "sessions": [], "source": "fallback"}
+        return self._request_json(ROUTES.llm_history, fallback=fallback) or deepcopy(fallback)
 
     def fetch_dashboard_mcp(self) -> dict[str, Any]:
-        fallback = self.fetch_dashboard_overview().get("mcp") or {
-            "summary": [],
-            "servers": [],
-            "tools": [],
-            "source": "overview_fallback",
-        }
-        return self.get_json("/api/v1/dashboard/mcp-status", fallback=fallback) or fallback
+        fallback = {"summary": [], "servers": [], "tools": [], "source": "fallback"}
+        return self._request_json(ROUTES.mcp_status, fallback=fallback) or deepcopy(fallback)
 
     def fetch_dashboard_db_graph(self) -> dict[str, Any]:
-        fallback = self.fetch_dashboard_overview().get("db_graph") or {
-            "nodes": [],
-            "edges": [],
-            "diagram": "",
-            "source": "overview_fallback",
-        }
-        return self.get_json("/api/v1/dashboard/db-schema", fallback=fallback) or fallback
+        fallback = {"nodes": [], "edges": [], "diagram": "", "source": "fallback"}
+        return self._request_json(ROUTES.db_schema, fallback=fallback) or deepcopy(fallback)

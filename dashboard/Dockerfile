@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y gcc libnss3 libatk-bridge2.0-0 libdrm2 
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PYTHONPATH=/app
+ENV LLM_RUNTIME_CONTEXT=python-services
 
 WORKDIR /app
 

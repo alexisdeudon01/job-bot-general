@@ -5,8 +5,43 @@ from typing import Any
 from dashboard.utils.formatters import format_datetime, format_number, format_status_label
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _item_to_dict(item: Any, label: str = "value") -> dict[str, Any]:
+    if isinstance(item, dict):
+        return item
+    if isinstance(item, str):
+        text = item.strip()
+        return {
+            "name": text,
+            "label": text,
+            "value": text,
+            "detail": text,
+            "description": text,
+            "status": text,
+            label: text,
+        }
+    if item is None:
+        return {}
+    return {
+        "name": str(item),
+        "label": str(item),
+        "value": item,
+        "detail": str(item),
+        "description": str(item),
+        label: item,
+    }
+
+
 def build_overview_metrics(overview: dict[str, Any]) -> list[dict[str, str]]:
-    metrics = overview.get("metrics", [])
+    overview = _safe_dict(overview)
+    metrics = [_item_to_dict(metric, "value") for metric in _safe_list(overview.get("metrics", []))]
     if metrics:
         return [
             {
@@ -26,6 +61,7 @@ def build_overview_metrics(overview: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def build_pipeline_timeline_text(runs: list[dict[str, Any]]) -> str:
+    runs = [_item_to_dict(run, "id") for run in _safe_list(runs)]
     if not runs:
         return "Aucun run pipeline disponible."
 
@@ -40,45 +76,51 @@ def build_pipeline_timeline_text(runs: list[dict[str, Any]]) -> str:
 
 def build_status_distribution(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     counts: dict[str, int] = {}
-    for item in items:
-        status = format_status_label(item.get("status"))
+    for item in _safe_list(items):
+        normalized = _item_to_dict(item, "status")
+        status = format_status_label(normalized.get("status"))
+        if not status:
+            status = "unknown"
         counts[status] = counts.get(status, 0) + 1
     return [{"status": key, "count": value} for key, value in counts.items()]
-
-
 def build_provider_cards(data: Any) -> list[dict[str, str]]:
-    items = data if isinstance(data, list) else data.get("items", [])
+    container = _safe_dict(data)
+    items = data if isinstance(data, list) else container.get("items", [])
     cards = []
-    for item in items:
+    for item in _safe_list(items):
+        normalized = _item_to_dict(item, "detail")
         cards.append(
             {
-                "name": str(item.get("name", "provider")),
-                "status": format_status_label(item.get("status")),
-                "detail": str(item.get("detail") or item.get("message") or "Aucun détail"),
+                "name": str(normalized.get("name", "provider")),
+                "status": format_status_label(normalized.get("status")),
+                "detail": str(normalized.get("detail") or normalized.get("message") or "Aucun détail"),
             }
         )
     return cards
 
 
 def build_runs_table(data: dict[str, Any]) -> list[dict[str, Any]]:
-    items = data.get("runs", data.get("items", []))
+    data = _safe_dict(data)
+    items = _safe_list(data.get("runs", data.get("items", [])))
     rows = []
     for item in items:
+        normalized = _item_to_dict(item, "id")
         rows.append(
             {
-                "id": item.get("id") or item.get("run_id"),
-                "service": item.get("service_name") or item.get("service") or "pipeline",
-                "status": format_status_label(item.get("status")),
-                "started_at": format_datetime(item.get("started_at") or item.get("created_at")),
-                "finished_at": format_datetime(item.get("finished_at") or item.get("updated_at")),
+                "id": normalized.get("id") or normalized.get("run_id"),
+                "service": normalized.get("service_name") or normalized.get("service") or "pipeline",
+                "status": format_status_label(normalized.get("status")),
+                "started_at": format_datetime(normalized.get("started_at") or normalized.get("created_at")),
+                "finished_at": format_datetime(normalized.get("finished_at") or normalized.get("updated_at")),
             }
         )
     return rows
 
 
 def build_entities_table(overview: dict[str, Any]) -> list[dict[str, Any]]:
-    entity_payload = overview.get("entities") if isinstance(overview, dict) else {}
-    summary = entity_payload.get("summary", []) if isinstance(entity_payload, dict) else []
+    overview = _safe_dict(overview)
+    entity_payload = _safe_dict(overview.get("entities"))
+    summary = [_item_to_dict(item, "count") for item in _safe_list(entity_payload.get("summary", []))]
     if summary:
         rows = []
         for item in summary:
@@ -92,7 +134,7 @@ def build_entities_table(overview: dict[str, Any]) -> list[dict[str, Any]]:
             )
         return rows
 
-    metrics = overview.get("metrics", [])
+    metrics = [_item_to_dict(metric, "value") for metric in _safe_list(overview.get("metrics", []))]
     if metrics:
         return [
             {
@@ -108,48 +150,55 @@ def build_entities_table(overview: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def build_entity_relationship_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    relationships = payload.get("relationships", [])
+    payload = _safe_dict(payload)
+    relationships = _safe_list(payload.get("relationships", []))
     rows = []
     for item in relationships:
+        normalized = _item_to_dict(item, "relation")
         rows.append(
             {
-                "source": item.get("source") or item.get("from") or "—",
-                "target": item.get("target") or item.get("to") or "—",
-                "relation": item.get("relation") or item.get("type") or "linked_to",
-                "count": item.get("count", "—"),
+                "source": normalized.get("source") or normalized.get("from") or "—",
+                "target": normalized.get("target") or normalized.get("to") or "—",
+                "relation": normalized.get("relation") or normalized.get("type") or "linked_to",
+                "count": normalized.get("count", "—"),
             }
         )
     return rows
 
 
 def build_entity_record_sections(payload: dict[str, Any]) -> list[tuple[str, list[dict[str, Any]]]]:
-    records = payload.get("records", {})
+    payload = _safe_dict(payload)
+    records = _safe_dict(payload.get("records", {}))
     sections: list[tuple[str, list[dict[str, Any]]]] = []
-    if isinstance(records, dict):
-        for key, items in records.items():
-            if isinstance(items, list):
-                sections.append((str(key), items))
+    for key, items in records.items():
+        normalized_items = [_item_to_dict(item) for item in _safe_list(items)]
+        if normalized_items:
+            sections.append((str(key), normalized_items))
     return sections
 
 
 def build_github_runs_table(data: Any) -> list[dict[str, Any]]:
-    items = data if isinstance(data, list) else data.get("items", [])
+    container = _safe_dict(data)
+    items = data if isinstance(data, list) else container.get("items", [])
     rows = []
-    for item in items:
+    for item in _safe_list(items):
+        normalized = _item_to_dict(item, "workflow_name")
         rows.append(
             {
-                "workflow": item.get("workflow_name") or item.get("name") or "workflow",
-                "status": format_status_label(item.get("status") or item.get("conclusion")),
-                "branch": item.get("branch") or item.get("head_branch") or "—",
-                "started_at": format_datetime(item.get("started_at") or item.get("created_at")),
+                "workflow": normalized.get("workflow_name") or normalized.get("name") or "workflow",
+                "status": format_status_label(normalized.get("status") or normalized.get("conclusion")),
+                "branch": normalized.get("branch") or normalized.get("head_branch") or "—",
+                "started_at": format_datetime(normalized.get("started_at") or normalized.get("created_at")),
             }
         )
     return rows
 
 
 def build_llm_history_rows(overview: dict[str, Any], providers: Any) -> list[dict[str, Any]]:
+    overview = _safe_dict(overview)
     llm_payload = overview if overview.get("summary") is not None or overview.get("recent_messages") is not None else {}
-    summary = llm_payload.get("summary", [])
+    llm_payload = _safe_dict(llm_payload)
+    summary = [_item_to_dict(item, "provider") for item in _safe_list(llm_payload.get("summary", []))]
     if summary:
         rows = []
         for item in summary:
@@ -167,151 +216,171 @@ def build_llm_history_rows(overview: dict[str, Any], providers: Any) -> list[dic
 
     rows = []
     generated_at = format_datetime(overview.get("generated_at"))
-    items = providers if isinstance(providers, list) else providers.get("items", [])
-    for item in items:
+    provider_container = _safe_dict(providers)
+    items = providers if isinstance(providers, list) else provider_container.get("items", [])
+    for item in _safe_list(items):
+        normalized = _item_to_dict(item, "provider")
         rows.append(
             {
-                "provider": item.get("name", "provider"),
-                "model": item.get("model") or "—",
-                "status": format_status_label(item.get("status")),
-                "requests": item.get("requests", 0),
+                "provider": normalized.get("name", "provider"),
+                "model": normalized.get("model") or "—",
+                "status": format_status_label(normalized.get("status")),
+                "requests": normalized.get("requests", 0),
                 "last_seen": generated_at,
-                "detail": item.get("detail") or item.get("message") or "Statut agrégé depuis l'API",
+                "detail": normalized.get("detail") or normalized.get("message") or "Statut agrégé depuis l'API",
             }
         )
     return rows
 
 
 def build_llm_recent_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for item in payload.get("recent_messages", []):
+    for item in _safe_list(payload.get("recent_messages", [])):
+        normalized = _item_to_dict(item, "content")
         rows.append(
             {
-                "session": item.get("session_id") or item.get("session") or "—",
-                "provider": item.get("provider") or "—",
-                "model": item.get("model") or "—",
-                "role": item.get("role") or "message",
-                "created_at": format_datetime(item.get("created_at")),
-                "content_preview": str(item.get("content_preview") or item.get("content") or "")[:160],
+                "session": normalized.get("session_id") or normalized.get("session") or "—",
+                "provider": normalized.get("provider") or "—",
+                "model": normalized.get("model") or "—",
+                "role": normalized.get("role") or "message",
+                "created_at": format_datetime(normalized.get("created_at")),
+                "content_preview": str(normalized.get("content_preview") or normalized.get("content") or "")[:160],
             }
         )
     return rows
 
 
 def build_llm_sessions_table(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for item in payload.get("sessions", []):
+    for item in _safe_list(payload.get("sessions", [])):
+        normalized = _item_to_dict(item, "session_id")
         rows.append(
             {
-                "session_id": item.get("session_id") or item.get("id") or "—",
-                "provider": item.get("provider") or "—",
-                "model": item.get("model") or "—",
-                "messages": item.get("message_count", item.get("messages", 0)),
-                "started_at": format_datetime(item.get("started_at") or item.get("created_at")),
-                "last_activity": format_datetime(item.get("last_activity") or item.get("updated_at")),
+                "session_id": normalized.get("session_id") or normalized.get("id") or "—",
+                "provider": normalized.get("provider") or "—",
+                "model": normalized.get("model") or "—",
+                "messages": normalized.get("message_count", normalized.get("messages", 0)),
+                "started_at": format_datetime(normalized.get("started_at") or normalized.get("created_at")),
+                "last_activity": format_datetime(normalized.get("last_activity") or normalized.get("updated_at")),
             }
         )
     return rows
 
 
 def build_mcp_summary_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for item in payload.get("summary", []):
+    for item in _safe_list(payload.get("summary", [])):
+        normalized = _item_to_dict(item, "component")
         rows.append(
             {
-                "component": item.get("component") or item.get("name") or "MCP",
-                "status": format_status_label(item.get("status")),
-                "detail": item.get("detail") or item.get("message") or "—",
-                "updated_at": format_datetime(item.get("updated_at") or item.get("last_seen")),
+                "component": normalized.get("component") or normalized.get("name") or "MCP",
+                "status": format_status_label(normalized.get("status")),
+                "detail": normalized.get("detail") or normalized.get("message") or "—",
+                "updated_at": format_datetime(normalized.get("updated_at") or normalized.get("last_seen")),
             }
         )
     return rows
 
 
 def build_mcp_servers_table(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for item in payload.get("servers", []):
+    for item in _safe_list(payload.get("servers", [])):
+        normalized = _item_to_dict(item, "server")
         rows.append(
             {
-                "server": item.get("name") or item.get("server") or "server",
-                "status": format_status_label(item.get("status")),
-                "transport": item.get("transport") or "—",
-                "endpoint": item.get("endpoint") or item.get("url") or "—",
-                "tools": item.get("tool_count", item.get("tools", 0)),
+                "server": normalized.get("name") or normalized.get("server") or "server",
+                "status": format_status_label(normalized.get("status")),
+                "transport": normalized.get("transport") or "—",
+                "endpoint": normalized.get("endpoint") or normalized.get("url") or "—",
+                "tools": normalized.get("tool_count", normalized.get("tools", 0)),
             }
         )
     return rows
 
 
 def build_mcp_tools_table(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for item in payload.get("tools", []):
+    for item in _safe_list(payload.get("tools", [])):
+        normalized = _item_to_dict(item, "tool")
         rows.append(
             {
-                "tool": item.get("name") or item.get("tool") or "tool",
-                "server": item.get("server") or item.get("server_name") or "—",
-                "status": format_status_label(item.get("status")),
-                "calls": item.get("call_count", item.get("calls", 0)),
-                "detail": item.get("detail") or item.get("description") or "—",
+                "tool": normalized.get("name") or normalized.get("tool") or "tool",
+                "server": normalized.get("server") or normalized.get("server_name") or "—",
+                "status": format_status_label(normalized.get("status")),
+                "calls": normalized.get("call_count", normalized.get("calls", 0)),
+                "detail": normalized.get("detail") or normalized.get("description") or "—",
             }
         )
     return rows
 
 
 def build_db_graph_diagram(payload: dict[str, Any]) -> str:
+    payload = _safe_dict(payload)
     explicit_diagram = str(payload.get("diagram") or "").strip()
     if explicit_diagram:
         return explicit_diagram
 
-    nodes = payload.get("nodes", [])
-    edges = payload.get("edges", [])
+    nodes = _safe_list(payload.get("nodes", []))
+    edges = _safe_list(payload.get("edges", []))
     if not nodes and not edges:
         return "Aucune donnée de graphe BDD disponible."
 
     lines = ["Schéma relationnel"]
     for node in nodes:
-        node_name = node.get("id") or node.get("name") or "table"
-        fields = node.get("fields") or []
+        normalized_node = _item_to_dict(node, "id")
+        node_name = normalized_node.get("id") or normalized_node.get("name") or "table"
+        fields = _safe_list(normalized_node.get("fields") or [])
         lines.append(f"[{node_name}]")
         for field in fields[:8]:
-            field_name = field.get("name") if isinstance(field, dict) else str(field)
+            field_dict = _item_to_dict(field, "name")
+            field_name = field_dict.get("name") or str(field)
             lines.append(f"  - {field_name}")
 
     if edges:
         lines.append("")
         lines.append("Relations")
         for edge in edges:
-            source = edge.get("source") or edge.get("from") or "?"
-            target = edge.get("target") or edge.get("to") or "?"
-            relation = edge.get("label") or edge.get("relation") or "references"
+            normalized_edge = _item_to_dict(edge, "source")
+            source = normalized_edge.get("source") or normalized_edge.get("from") or "?"
+            target = normalized_edge.get("target") or normalized_edge.get("to") or "?"
+            relation = normalized_edge.get("label") or normalized_edge.get("relation") or "references"
             lines.append(f"{source} -> {target} ({relation})")
     return "\n".join(lines)
 
 
 def build_db_graph_nodes_table(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for node in payload.get("nodes", []):
-        fields = node.get("fields") or []
+    for node in _safe_list(payload.get("nodes", [])):
+        normalized = _item_to_dict(node, "id")
+        fields = _safe_list(normalized.get("fields") or [])
         rows.append(
             {
-                "table": node.get("id") or node.get("name") or "table",
+                "table": normalized.get("id") or normalized.get("name") or "table",
                 "fields": len(fields),
-                "primary_key": node.get("primary_key") or node.get("pk") or "—",
-                "detail": node.get("detail") or node.get("description") or "—",
+                "primary_key": normalized.get("primary_key") or normalized.get("pk") or "—",
+                "detail": normalized.get("detail") or normalized.get("description") or "—",
             }
         )
     return rows
 
 
 def build_db_graph_edges_table(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = _safe_dict(payload)
     rows = []
-    for edge in payload.get("edges", []):
+    for edge in _safe_list(payload.get("edges", [])):
+        normalized = _item_to_dict(edge, "source")
         rows.append(
             {
-                "source": edge.get("source") or edge.get("from") or "—",
-                "target": edge.get("target") or edge.get("to") or "—",
-                "relation": edge.get("label") or edge.get("relation") or "references",
-                "field": edge.get("field") or edge.get("foreign_key") or "—",
+                "source": normalized.get("source") or normalized.get("from") or "—",
+                "target": normalized.get("target") or normalized.get("to") or "—",
+                "relation": normalized.get("label") or normalized.get("relation") or "references",
+                "field": normalized.get("field") or normalized.get("foreign_key") or "—",
             }
         )
     return rows

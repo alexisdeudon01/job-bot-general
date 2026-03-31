@@ -33,3 +33,28 @@ jobs:
           tags: job-bot-general/${{ matrix.service }}:ci
           build-args: |
             SGAI_API_KEY=${{ env.SGAI_API_KEY }}
+
+  scrapegraph-connectivity:
+    runs-on: ubuntu-latest
+    env:
+      SGAI_API_KEY: ${{ secrets.SGAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install MCP server dependencies
+        if: ${{ env.SGAI_API_KEY != '' }}
+        run: pip install -r mcp_server/requirements.txt
+
+      - name: Verify ScrapeGraph connectivity
+        if: ${{ env.SGAI_API_KEY != '' }}
+        run: python -c "from mcp_server.services.scrapegraph_service import ScrapeGraphService; service = ScrapeGraphService(); result = service.markdownify_job_page('https://example.com'); assert isinstance(result, dict), 'Expected dict response'; text = str(result.get('markdown') or result.get('result') or ''); assert text.strip(), 'Empty ScrapeGraph response'; print('ScrapeGraph connectivity OK')"
+
+      - name: Skip connectivity test when secret is absent
+        if: ${{ env.SGAI_API_KEY == '' }}
+        run: echo "Skipping ScrapeGraph connectivity test because SGAI_API_KEY is not configured."

@@ -5,8 +5,10 @@ from typing import Any
 
 import streamlit as st
 
+from dashboard.pages.diagrams import render_page as render_diagrams_page
 from dashboard.pages.entities import render_page as render_entities_page
 from dashboard.pages.github_actions import render_page as render_github_actions_page
+from dashboard.pages.live_logs import render_page as render_live_logs_page
 from dashboard.pages.llm_history import render_page as render_llm_history_page
 from dashboard.pages.overview import render_page as render_overview_page
 from dashboard.pages.runs import render_page as render_runs_page
@@ -21,6 +23,100 @@ from dashboard.services.view_models import (
 )
 
 st.set_page_config(page_title="Job Bot Dashboard", layout="wide")
+
+
+CUSTOM_CSS = """
+<style>
+.block-container {
+    padding-top: 1.25rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
+}
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+}
+[data-testid="stSidebar"] * {
+    color: #e5eefb;
+}
+.dashboard-shell {
+    background: linear-gradient(135deg, #081120 0%, #0f172a 45%, #111827 100%);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    padding: 1.25rem 1.25rem 0.25rem 1.25rem;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35);
+    margin-bottom: 1rem;
+}
+.dashboard-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.25rem 0 1rem 0;
+}
+.dashboard-hero h1 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 2rem;
+}
+.dashboard-hero p {
+    margin: 0.35rem 0 0 0;
+    color: #cbd5e1;
+}
+.dashboard-chip-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.dashboard-chip {
+    background: rgba(59, 130, 246, 0.16);
+    color: #dbeafe;
+    border: 1px solid rgba(96, 165, 250, 0.28);
+    border-radius: 999px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.9rem;
+}
+.dashboard-panel {
+    background: rgba(15, 23, 42, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 18px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.dashboard-panel h3,
+.dashboard-panel h4,
+.dashboard-panel label,
+.dashboard-panel p,
+.dashboard-panel span {
+    color: #e2e8f0;
+}
+</style>
+"""
+
+
+def _apply_theme() -> None:
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+def _render_shell_header() -> None:
+    st.markdown(
+        """
+        <div class="dashboard-shell">
+          <div class="dashboard-hero">
+            <div>
+              <h1>Job Bot Dashboard</h1>
+              <p>Vue humaine, lisible et centralisée du pipeline, du MCP, de la base de données et des logs en direct.</p>
+            </div>
+            <div class="dashboard-chip-row">
+              <div class="dashboard-chip">MCP ScrapeGraph</div>
+              <div class="dashboard-chip">Monitoring pipeline</div>
+              <div class="dashboard-chip">Architecture & BDD</div>
+              <div class="dashboard-chip">Logs temps réel</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def init_session_state() -> None:
@@ -204,20 +300,24 @@ def _render_mcp_page(client: ApiClient) -> None:
 
 def main() -> None:
     init_session_state()
+    _apply_theme()
     client = ApiClient()
 
+    _render_shell_header()
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
         "Onglets",
         options=[
-            ("app", "App"),
-            ("overview", "Overview"),
+            ("app", "Pilotage"),
+            ("overview", "Vue d'ensemble"),
             ("entities", "Entités"),
-            ("runs", "Runs"),
+            ("runs", "Exécutions"),
             ("llm_history", "Historique IA"),
             ("github_actions", "GitHub Actions"),
-            ("schema", "Architecture BDD"),
-            ("mcp", "MCP"),
+            ("schema", "Schéma BDD"),
+            ("diagrams", "Diagrammes"),
+            ("mcp", "MCP & ScrapeGraph"),
+            ("live_logs", "Logs en direct"),
         ],
         format_func=lambda item: item[1],
         index=0,
@@ -239,8 +339,12 @@ def main() -> None:
         render_github_actions_page(client)
     elif page == "schema":
         _render_schema_architecture_page(client)
+    elif page == "diagrams":
+        render_diagrams_page()
     elif page == "mcp":
         _render_mcp_page(client)
+    elif page == "live_logs":
+        render_live_logs_page()
 
     st.divider()
     st.caption(f"Dernier refresh UI : {st.session_state.dashboard_last_refresh_at}")

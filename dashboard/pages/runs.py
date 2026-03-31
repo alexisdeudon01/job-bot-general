@@ -25,11 +25,24 @@ def _render_plotly_status_chart(distribution: list[dict[str, int]]) -> None:
 
 def _build_run_steps_table(items: list[dict[str, object]]) -> list[dict[str, object]]:
     rows = []
-    for item in items[:40]:
+    safe_items = items if isinstance(items, list) else []
+    for item in safe_items[:40]:
+        if not isinstance(item, dict):
+            continue
         run_id = item.get("id") or item.get("run_id") or "—"
         steps = item.get("steps")
         if isinstance(steps, list):
             for step in steps:
+                if not isinstance(step, dict):
+                    rows.append(
+                        {
+                            "run_id": run_id,
+                            "step": str(step) or "step",
+                            "status": "unknown",
+                            "detail": "Étape non structurée renvoyée par l'API.",
+                        }
+                    )
+                    continue
                 rows.append(
                     {
                         "run_id": run_id,
