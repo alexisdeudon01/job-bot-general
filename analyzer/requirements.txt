@@ -1,4 +1,3 @@
-anthropic
 requests
 beautifulsoup4
 spacy
