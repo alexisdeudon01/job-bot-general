@@ -9,8 +9,6 @@
 			"env": {
 				"SGAI_API_KEY": "${input:sgaiApiKey}"
 			},
-			"gallery": "https://api.mcp.github.com",
-			"version": "1.0.1"
 		},
 		"job-bot-mcp-host": {
 			"type": "stdio",
@@ -27,7 +25,6 @@
 				"GH_TOKEN": "${input:ghToken}",
 				"DATABASE_URL": "${input:databaseUrl}"
 			},
-			"description": "MCP Host local — Orchestrateur top-down (Postgres, Fetch, Filesystem, GitHub, ScrapeGraph)"
 		},
 		"modelcontextprotocol/fetch": {
 			"type": "stdio",
