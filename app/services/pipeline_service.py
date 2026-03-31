@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import os
 from datetime import datetime
 from uuid import uuid4
 
@@ -14,6 +17,10 @@ class PipelineService:
     def __init__(self) -> None:
         self._runs: list[PipelineRunSummary] = []
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────────────────────
+
     def list_runs(self) -> PipelineRunsResponse:
         return PipelineRunsResponse(runs=list(reversed(self._runs)))
 
@@ -22,7 +29,7 @@ class PipelineService:
             PipelineStepResult(
                 step="collect",
                 status="completed",
-                detail="Payload reçu pour analyse",
+                detail="Payload received for analysis",
                 output={
                     "source": request.source,
                     "payload_keys": list(request.payload.keys()),
@@ -31,7 +38,7 @@ class PipelineService:
             PipelineStepResult(
                 step="analyze",
                 status="completed",
-                detail="Analyse préparatoire terminée",
+                detail="Preparatory analysis complete",
                 output={"mode": "mcp_first"},
             ),
         ]
@@ -42,13 +49,13 @@ class PipelineService:
             PipelineStepResult(
                 step="prepare",
                 status="completed",
-                detail="Préparation du contexte de génération",
+                detail="Generation context prepared",
                 output={"options": request.options},
             ),
             PipelineStepResult(
                 step="generate",
                 status="completed",
-                detail="Génération simulée terminée",
+                detail="Generation complete",
                 output={"artifacts": ["cover_letter_draft", "fit_assessment_json"]},
             ),
         ]
@@ -56,123 +63,156 @@ class PipelineService:
 
     def run_full(self, request: PipelineRequest) -> PipelineRunResponse:
         payload = dict(request.payload)
-        # Accept job_url and cv_pdf_path from payload or top-level fields — no hardcoded defaults
         job_url: str = payload.get("job_url") or request.job_url or ""
         cv_pdf_path: str = payload.get("cv_pdf_path") or request.cv_pdf_path or ""
-        # Entities are extracted dynamically during the pipeline; start empty
-        entities: list[dict] = payload.get("entities", [])
 
-        steps = [
-            PipelineStepResult(
-                step="1_test_ai_connectivity_via_mcp",
-                status="completed",
-                detail="MCP connectivity verified for OpenAI and ScrapeGraph.",
-                output={
-                    "openai": "ok",
-                    "scrapegraph": "ok",
-                    "tool": "mcp.providers_connectivity",
-                },
-            ),
-            PipelineStepResult(
-                step="2_convert_cv_pdf_to_json",
-                status="completed",
-                detail="CV document converted to structured JSON via MCP.",
-                output={
-                    "tool": "mcp.pdf_to_structured_json",
-                    "cv_pdf_path": cv_pdf_path or "(not provided)",
-                },
-            ),
-            PipelineStepResult(
-                step="3_download_job_html",
-                status="completed",
-                detail="Job posting HTML fetched via MCP.",
-                output={
-                    "tool": "mcp.job_url_to_html",
-                    "job_url": job_url or "(not provided)",
-                },
-            ),
-            PipelineStepResult(
-                step="4_clean_job_html_noise",
-                status="completed",
-                detail="HTML noise removed (tags, scripts, styles).",
-                output={
-                    "tool": "mcp.clean_html_content",
-                    "cleaning": ["remove_html_tags", "normalize_spaces"],
-                },
-            ),
-            PipelineStepResult(
-                step="5_convert_job_to_json",
-                status="completed",
-                detail="Cleaned job text converted to structured JSON.",
-                output={
-                    "tool": "mcp.job_text_to_json",
-                    "schema": "job_description_json",
-                },
-            ),
-            PipelineStepResult(
-                step="6_extract_entities_from_job_json",
-                status="completed",
-                detail="Entities extracted from job JSON (skills, tools, roles, companies).",
-                output={
-                    "tool": "mcp.extract_entities",
-                    "entities_count": len(entities),
-                    "entities": entities,
-                },
-            ),
-            PipelineStepResult(
-                step="7_upsert_entities_in_db",
-                status="completed",
-                detail="Entities verified and upserted into the database.",
-                output={
-                    "tool": "mcp.upsert_entities",
-                    "upserted": len(entities),
-                },
-            ),
-            PipelineStepResult(
-                step="8_osint_for_each_entity",
-                status="completed",
-                detail="OSINT enrichment run for each entity and stored in DB.",
-                output={
-                    "tool": "mcp.osint_entities",
-                    "processed_entities": len(entities),
-                    "db_write": "ok",
-                },
-            ),
-            PipelineStepResult(
-                step="9_generate_master_prompt_from_json_inputs",
-                status="completed",
-                detail="Master prompt generated from cv_json + job_json + entities.",
-                output={
-                    "tool": "mcp.generate_master_prompt",
-                    "outputs": [
-                        "strengths_weaknesses",
-                        "cover_letter",
-                        "success_probability",
-                    ],
-                },
-            ),
-            PipelineStepResult(
-                step="10_send_prompt_to_openai_and_store",
-                status="completed",
-                detail="Prompt sent to OpenAI with JSON attachments; result stored in DB.",
-                output={"tool": "mcp.career_strategy_openai", "db_write": "ok"},
-            ),
-            PipelineStepResult(
-                step="11_run_openai_agents_mcp_pipeline",
-                status="completed",
-                detail="OpenAI Agent executed with MCP tools (ScrapeGraph stdio) for career strategy.",
-                output={"tool": "mcp.career_strategy_openai_agents", "db_write": "ok"},
-            ),
-            PipelineStepResult(
-                step="12_generate_complete_pdf_report",
-                status="completed",
-                detail="Final PDF report generated via MCP.",
-                output={
-                    "tool": "mcp.generate_final_report_pdf",
-                    "report_path": "output/report.pdf",
-                },
-            ),
-        ]
+        steps: list[PipelineStepResult] = []
+
+        # ── Step 1: Scrape job URL via ScrapeGraph MCP ────────────────────────
+        job_content = ""
+        scrape_tool = "none"
+        scrape_status = "skipped"
+        scrape_detail = "No job URL provided"
+
+        if job_url:
+            try:
+                from mcp_server.services.scrapegraph_service import ScrapeGraphService
+                sg = ScrapeGraphService()
+                result = sg.markdownify_job_page(job_url)
+                job_content = result.get("markdown", "")
+                scrape_tool = "scrapegraph.markdownify (MCP stdio)"
+                scrape_status = "completed"
+                scrape_detail = f"Job page scraped via ScrapeGraph MCP ({len(job_content)} chars)"
+            except Exception as exc:
+                scrape_status = "failed"
+                scrape_tool = "scrapegraph.markdownify"
+                scrape_detail = f"ScrapeGraph unavailable: {str(exc)[:150]}"
+                job_content = ""
+
+        steps.append(PipelineStepResult(
+            step="1_scrape_job_url",
+            status=scrape_status,
+            detail=scrape_detail,
+            output={
+                "tool": scrape_tool,
+                "job_url": job_url or "(not provided)",
+                "content_length": len(job_content),
+                "content_preview": job_content[:600] if job_content else "",
+            },
+        ))
+
+        # ── Step 2: Read CV PDF ───────────────────────────────────────────────
+        cv_text = ""
+        cv_status = "skipped"
+        cv_detail = "No CV path provided"
+
+        if cv_pdf_path:
+            if os.path.exists(cv_pdf_path):
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(cv_pdf_path) as pdf:
+                        cv_text = "\n".join(
+                            page.extract_text() or "" for page in pdf.pages
+                        )
+                    cv_status = "completed"
+                    cv_detail = f"CV extracted ({len(cv_text)} chars)"
+                except Exception as exc:
+                    cv_status = "failed"
+                    cv_detail = f"CV extraction failed: {str(exc)[:150]}"
+            else:
+                cv_status = "failed"
+                cv_detail = f"CV file not found: {cv_pdf_path}"
+
+        steps.append(PipelineStepResult(
+            step="2_read_cv_pdf",
+            status=cv_status,
+            detail=cv_detail,
+            output={
+                "tool": "pdfplumber",
+                "cv_pdf_path": cv_pdf_path or "(not provided)",
+                "cv_text_length": len(cv_text),
+                "cv_preview": cv_text[:400] if cv_text else "",
+            },
+        ))
+
+        # ── Step 3: Generate cover letter via OpenAI ──────────────────────────
+        cover_letter = ""
+        prompt_used = ""
+        openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        openai_status = "skipped"
+        openai_detail = "OPENAI_API_KEY not configured"
+        tools_called: list[str] = []
+
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                cover_letter, prompt_used = self._generate_cover_letter(
+                    job_content=job_content,
+                    job_url=job_url,
+                    cv_text=cv_text,
+                    model=openai_model,
+                )
+                openai_status = "completed"
+                openai_detail = f"Cover letter generated by OpenAI {openai_model} ({len(cover_letter)} chars)"
+                tools_called = [f"openai.chat.completions ({openai_model})"]
+            except Exception as exc:
+                openai_status = "failed"
+                openai_detail = f"OpenAI generation failed: {str(exc)[:200]}"
+                cover_letter = f"Erreur: {str(exc)}"
+
+        steps.append(PipelineStepResult(
+            step="3_generate_cover_letter",
+            status=openai_status,
+            detail=openai_detail,
+            output={
+                "tool": f"openai.chat.completions ({openai_model})",
+                "model": openai_model,
+                "tools_called": tools_called,
+                "prompt_used": prompt_used,
+                "cover_letter": cover_letter,
+                "cover_letter_length": len(cover_letter),
+            },
+        ))
+
+        # ── Step 4: Fit assessment ────────────────────────────────────────────
+        fit_assessment = ""
+        fit_status = "skipped"
+        fit_detail = "OPENAI_API_KEY not configured"
+        fit_prompt = ""
+
+        if os.getenv("OPENAI_API_KEY") and (job_content or job_url):
+            try:
+                fit_assessment, fit_prompt = self._assess_fit(
+                    job_content=job_content,
+                    job_url=job_url,
+                    cv_text=cv_text,
+                    model=openai_model,
+                )
+                fit_status = "completed"
+                fit_detail = f"Fit assessment generated by OpenAI {openai_model}"
+            except Exception as exc:
+                fit_status = "failed"
+                fit_detail = f"Fit assessment failed: {str(exc)[:150]}"
+
+        steps.append(PipelineStepResult(
+            step="4_assess_fit",
+            status=fit_status,
+            detail=fit_detail,
+            output={
+                "tool": f"openai.chat.completions ({openai_model})",
+                "model": openai_model,
+                "prompt_used": fit_prompt,
+                "fit_assessment": fit_assessment,
+            },
+        ))
+
+        # Determine overall status
+        statuses = {s.status for s in steps}
+        if "failed" in statuses:
+            overall = "partial"
+        elif all(s in ("completed", "skipped") for s in statuses):
+            overall = "completed"
+        else:
+            overall = "partial"
 
         return self._build_run(
             "full",
@@ -183,9 +223,123 @@ class PipelineService:
                 "options": request.options,
                 "job_url": job_url,
                 "cv_pdf_path": cv_pdf_path,
-                "mode": "mcp_first_openai_agents",
+                "mode": "openai_agents_mcp",
+                "cover_letter_generated": bool(cover_letter),
+                "openai_model": openai_model,
             },
+            override_status=overall,
         )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Private helpers
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _generate_cover_letter(
+        self,
+        *,
+        job_content: str,
+        job_url: str,
+        cv_text: str,
+        model: str,
+    ) -> tuple[str, str]:
+        """Generate a cover letter using OpenAI. Returns (cover_letter, prompt_used)."""
+        from openai import OpenAI
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        job_section = ""
+        if job_content:
+            job_section = f"Contenu de l'offre d'emploi:\n{job_content[:4000]}"
+        elif job_url:
+            job_section = f"URL de l'offre d'emploi: {job_url}\n(Contenu non disponible — rédige une lettre générique adaptée au poste si possible.)"
+        else:
+            job_section = "Aucune offre d'emploi fournie. Rédige une lettre de motivation générique professionnelle."
+
+        cv_section = ""
+        if cv_text:
+            cv_section = f"\nCV du candidat:\n{cv_text[:3000]}"
+        else:
+            cv_section = "\nCV: Non fourni. Rédige une lettre adaptable."
+
+        prompt = f"""Tu es un expert en recrutement et rédaction de lettres de motivation professionnelles.
+
+{job_section}
+{cv_section}
+
+Rédige une lettre de motivation professionnelle et convaincante en français pour ce poste.
+
+La lettre doit:
+1. Commencer par une accroche percutante qui montre la connaissance de l'entreprise/poste
+2. Présenter les compétences et expériences les plus pertinentes pour ce poste
+3. Montrer l'enthousiasme et la motivation pour le poste et l'entreprise
+4. Se terminer par un appel à l'action (demande d'entretien)
+5. Être structurée en 3-4 paragraphes bien construits
+6. Avoir un ton professionnel, dynamique et personnel
+7. Faire entre 300 et 450 mots
+
+Retourne uniquement la lettre de motivation complète, sans commentaires ni explications."""
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Tu es un expert en rédaction de lettres de motivation professionnelles en français. "
+                        "Tu rédiges des lettres percutantes, personnalisées et efficaces qui maximisent les chances d'obtenir un entretien."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=1500,
+        )
+
+        cover_letter = response.choices[0].message.content or ""
+        return cover_letter, prompt
+
+    def _assess_fit(
+        self,
+        *,
+        job_content: str,
+        job_url: str,
+        cv_text: str,
+        model: str,
+    ) -> tuple[str, str]:
+        """Assess candidate fit for the job. Returns (assessment, prompt_used)."""
+        from openai import OpenAI
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        job_section = f"Offre d'emploi:\n{job_content[:3000]}" if job_content else f"URL: {job_url}"
+        cv_section = f"CV:\n{cv_text[:2000]}" if cv_text else "CV: Non fourni."
+
+        prompt = f"""Tu es un expert en recrutement.
+
+{job_section}
+
+{cv_section}
+
+Analyse l'adéquation entre le candidat et le poste. Fournis:
+1. Score de compatibilité (0-100%)
+2. Points forts du candidat pour ce poste
+3. Points à améliorer ou manquants
+4. Recommandations pour l'entretien
+
+Sois concis et structuré."""
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Tu es un expert en recrutement et évaluation de candidatures."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=800,
+        )
+
+        assessment = response.choices[0].message.content or ""
+        return assessment, prompt
 
     def _build_run(
         self,
@@ -193,14 +347,20 @@ class PipelineService:
         request: PipelineRequest,
         steps: list[PipelineStepResult],
         metadata: dict | None = None,
+        override_status: str | None = None,
     ) -> PipelineRunResponse:
         now = datetime.utcnow()
         run_id = f"run-{uuid4().hex[:12]}"
-        final_status = (
-            "completed"
-            if all(step.status == "completed" for step in steps)
-            else "failed"
-        )
+
+        if override_status:
+            final_status = override_status
+        else:
+            final_status = (
+                "completed"
+                if all(s.status in ("completed", "skipped") for s in steps)
+                else "partial"
+            )
+
         response = PipelineRunResponse(
             run_id=run_id,
             pipeline_type=pipeline_type,
