@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     github_repository: str | None = Field(default=None)
     github_token: str | None = Field(default=None)
 
-    anthropic_api_key: str | None = Field(default=None)
     openai_api_key: str | None = Field(default=None)
     scrapegraph_api_key: str | None = Field(default=None, alias="SGAI_API_KEY")
 

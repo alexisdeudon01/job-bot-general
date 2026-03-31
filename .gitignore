@@ -10,3 +10,9 @@ output/
 data/*.pdf
 data/*.txt
 *.log
+
+# Virtual environment
+.venv/
+
+# SDK zip (local dev only)
+docs/openai-agents-python-main.zip

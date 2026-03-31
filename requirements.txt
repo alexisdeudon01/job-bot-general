@@ -11,8 +11,8 @@ plotly
 python-dotenv
 requests
 beautifulsoup4
-anthropic
 openai
+openai-agents
 pdfplumber
 pypdf
 PyPDF2

@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.session import SessionLocal
 from app.integrations.github_actions import list_github_action_runs
 from app.integrations.providers import get_provider_statuses
-from app.models.entities import Authority, BusinessEntity, EntityRelationship, Framework, Location, Organization, OrganizationalUnit
+from app.models.entities import (
+    Authority,
+    BusinessEntity,
+    EntityRelationship,
+    Framework,
+    Location,
+    Organization,
+    OrganizationalUnit,
+)
 from app.models.github_actions import GitHubWorkflowJob, GitHubWorkflowRun
 from app.models.llm import ChatMessage, ChatSession, LLMModel, Secret
 from app.models.pipeline import PipelineRun, Provider, RunEvent, ServiceRun
@@ -49,7 +57,9 @@ class DashboardService:
                 key="entities_total",
                 label="Business entities",
                 value=entities_summary["summary"]["total_entities"],
-                trend="up" if entities_summary["summary"]["total_entities"] else "stable",
+                trend=(
+                    "up" if entities_summary["summary"]["total_entities"] else "stable"
+                ),
             ),
             DashboardMetric(
                 key="llm_messages",
@@ -88,7 +98,9 @@ class DashboardService:
                         selectinload(BusinessEntity.outgoing_relationships),
                         selectinload(BusinessEntity.incoming_relationships),
                     )
-                    .order_by(BusinessEntity.created_at.desc(), BusinessEntity.id.desc())
+                    .order_by(
+                        BusinessEntity.created_at.desc(), BusinessEntity.id.desc()
+                    )
                 )
                 .scalars()
                 .all()
@@ -101,7 +113,9 @@ class DashboardService:
             authorities = db.execute(select(Authority)).scalars().all()
 
             entities_by_type = Counter(entity.entity_type for entity in entities)
-            relationship_by_type = Counter(rel.relationship_type for rel in relationships)
+            relationship_by_type = Counter(
+                rel.relationship_type for rel in relationships
+            )
 
             items = []
             for entity in entities[:50]:
@@ -113,8 +127,14 @@ class DashboardService:
                         "description": entity.description,
                         "is_active": entity.is_active,
                         "external_ref": entity.external_ref,
-                        "organization": entity.organization.name if entity.organization else None,
-                        "organizational_unit": entity.organizational_unit.name if entity.organizational_unit else None,
+                        "organization": (
+                            entity.organization.name if entity.organization else None
+                        ),
+                        "organizational_unit": (
+                            entity.organizational_unit.name
+                            if entity.organizational_unit
+                            else None
+                        ),
                         "location": entity.location.name if entity.location else None,
                         "attributes": entity.attributes or {},
                         "metadata": entity.metadata_json or {},
@@ -158,11 +178,22 @@ class DashboardService:
                 "items": items,
                 "relationships": relationship_items,
                 "catalog": {
-                    "organizations": [self._serialize_named_record(item) for item in organizations[:50]],
-                    "organizational_units": [self._serialize_named_record(item) for item in units[:50]],
-                    "locations": [self._serialize_named_record(item) for item in locations[:50]],
-                    "frameworks": [self._serialize_named_record(item) for item in frameworks[:50]],
-                    "authorities": [self._serialize_named_record(item) for item in authorities[:50]],
+                    "organizations": [
+                        self._serialize_named_record(item)
+                        for item in organizations[:50]
+                    ],
+                    "organizational_units": [
+                        self._serialize_named_record(item) for item in units[:50]
+                    ],
+                    "locations": [
+                        self._serialize_named_record(item) for item in locations[:50]
+                    ],
+                    "frameworks": [
+                        self._serialize_named_record(item) for item in frameworks[:50]
+                    ],
+                    "authorities": [
+                        self._serialize_named_record(item) for item in authorities[:50]
+                    ],
                 },
                 "fallback": False,
             }
@@ -205,10 +236,18 @@ class DashboardService:
                 .scalars()
                 .all()
             )
-            secrets = db.execute(select(Secret).order_by(Secret.created_at.desc(), Secret.id.desc())).scalars().all()
+            secrets = (
+                db.execute(
+                    select(Secret).order_by(Secret.created_at.desc(), Secret.id.desc())
+                )
+                .scalars()
+                .all()
+            )
 
             role_counts = Counter(message.role for message in messages)
-            finish_reason_counts = Counter(message.finish_reason or "unknown" for message in messages)
+            finish_reason_counts = Counter(
+                message.finish_reason or "unknown" for message in messages
+            )
             model_counts = Counter()
             token_totals = {
                 "prompt_tokens": 0,
@@ -219,9 +258,15 @@ class DashboardService:
             message_items = []
             for message in messages[:100]:
                 token_usage = message.token_usage or {}
-                token_totals["prompt_tokens"] += int(token_usage.get("prompt_tokens", 0) or 0)
-                token_totals["completion_tokens"] += int(token_usage.get("completion_tokens", 0) or 0)
-                token_totals["total_tokens"] += int(token_usage.get("total_tokens", 0) or 0)
+                token_totals["prompt_tokens"] += int(
+                    token_usage.get("prompt_tokens", 0) or 0
+                )
+                token_totals["completion_tokens"] += int(
+                    token_usage.get("completion_tokens", 0) or 0
+                )
+                token_totals["total_tokens"] += int(
+                    token_usage.get("total_tokens", 0) or 0
+                )
 
                 session = message.chat_session
                 model = session.llm_model if session else None
@@ -236,7 +281,9 @@ class DashboardService:
                         "session_type": session.session_type if session else None,
                         "session_status": session.status if session else None,
                         "model_name": model.name if model else None,
-                        "provider_name": model.provider.name if model and model.provider else None,
+                        "provider_name": (
+                            model.provider.name if model and model.provider else None
+                        ),
                         "role": message.role,
                         "content_preview": self._preview_text(message.content),
                         "finish_reason": message.finish_reason,
@@ -255,8 +302,14 @@ class DashboardService:
                         "title": session.title,
                         "session_type": session.session_type,
                         "status": session.status,
-                        "model_name": session.llm_model.name if session.llm_model else None,
-                        "provider_name": session.llm_model.provider.name if session.llm_model and session.llm_model.provider else None,
+                        "model_name": (
+                            session.llm_model.name if session.llm_model else None
+                        ),
+                        "provider_name": (
+                            session.llm_model.provider.name
+                            if session.llm_model and session.llm_model.provider
+                            else None
+                        ),
                         "message_count": len(session.messages),
                         "roles": dict(sorted(roles.items())),
                         "metadata": session.metadata_json or {},
@@ -272,7 +325,9 @@ class DashboardService:
                         "id": model.id,
                         "name": model.name,
                         "model_family": model.model_family,
-                        "provider_name": model.provider.name if model.provider else None,
+                        "provider_name": (
+                            model.provider.name if model.provider else None
+                        ),
                         "context_window": model.context_window,
                         "supports_streaming": model.supports_streaming,
                         "is_default": model.is_default,
@@ -324,7 +379,9 @@ class DashboardService:
         pipeline_runs = pipeline_service.list_runs().runs
         services = get_provider_statuses()
         github_runs = list_github_action_runs()
-        fallback_payload = self._fallback_mcp_status_detail(pipeline_runs, services, github_runs)
+        fallback_payload = self._fallback_mcp_status_detail(
+            pipeline_runs, services, github_runs
+        )
 
         def _query(db: Session) -> dict[str, Any]:
             run_rows = (
@@ -339,19 +396,49 @@ class DashboardService:
                 .scalars()
                 .all()
             )
-            service_rows = db.execute(select(ServiceRun).order_by(ServiceRun.created_at.desc(), ServiceRun.id.desc())).scalars().all()
-            event_rows = db.execute(select(RunEvent).order_by(RunEvent.created_at.desc(), RunEvent.id.desc())).scalars().all()
-            provider_rows = db.execute(select(Provider).order_by(Provider.name.asc())).scalars().all()
-            gh_run_rows = (
+            service_rows = (
                 db.execute(
-                    select(GitHubWorkflowRun)
-                    .options(selectinload(GitHubWorkflowRun.jobs))
-                    .order_by(GitHubWorkflowRun.created_at.desc(), GitHubWorkflowRun.id.desc())
+                    select(ServiceRun).order_by(
+                        ServiceRun.created_at.desc(), ServiceRun.id.desc()
+                    )
                 )
                 .scalars()
                 .all()
             )
-            gh_job_rows = db.execute(select(GitHubWorkflowJob).order_by(GitHubWorkflowJob.created_at.desc(), GitHubWorkflowJob.id.desc())).scalars().all()
+            event_rows = (
+                db.execute(
+                    select(RunEvent).order_by(
+                        RunEvent.created_at.desc(), RunEvent.id.desc()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            provider_rows = (
+                db.execute(select(Provider).order_by(Provider.name.asc()))
+                .scalars()
+                .all()
+            )
+            gh_run_rows = (
+                db.execute(
+                    select(GitHubWorkflowRun)
+                    .options(selectinload(GitHubWorkflowRun.jobs))
+                    .order_by(
+                        GitHubWorkflowRun.created_at.desc(), GitHubWorkflowRun.id.desc()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            gh_job_rows = (
+                db.execute(
+                    select(GitHubWorkflowJob).order_by(
+                        GitHubWorkflowJob.created_at.desc(), GitHubWorkflowJob.id.desc()
+                    )
+                )
+                .scalars()
+                .all()
+            )
 
             tool_counter = Counter()
             status_counter = Counter(run.status for run in run_rows)
@@ -393,7 +480,11 @@ class DashboardService:
                 )
 
             for service_run in service_rows[:100]:
-                for payload in [service_run.input_payload or {}, service_run.output_payload or {}, service_run.metadata_json or {}]:
+                for payload in [
+                    service_run.input_payload or {},
+                    service_run.output_payload or {},
+                    service_run.metadata_json or {},
+                ]:
                     tool_name = payload.get("tool")
                     if tool_name:
                         tool_counter[tool_name] += 1
@@ -523,14 +614,22 @@ class DashboardService:
                             "name": column["name"],
                             "type": str(column["type"]),
                             "nullable": bool(column.get("nullable", True)),
-                            "default": str(column.get("default")) if column.get("default") is not None else None,
+                            "default": (
+                                str(column.get("default"))
+                                if column.get("default") is not None
+                                else None
+                            ),
                             "primary_key": bool(column.get("primary_key", False)),
                         }
                     )
 
                 row_count = None
                 try:
-                    row_count = db.execute(select(func.count()).select_from(self._table_from_name(table_name))).scalar_one()
+                    row_count = db.execute(
+                        select(func.count()).select_from(
+                            self._table_from_name(table_name)
+                        )
+                    ).scalar_one()
                 except SQLAlchemyError:
                     row_count = None
 
@@ -551,7 +650,11 @@ class DashboardService:
                         {
                             "source": table_name,
                             "target": foreign_key.get("referred_table"),
-                            "label": ",".join(constrained_columns) if constrained_columns else "fk",
+                            "label": (
+                                ",".join(constrained_columns)
+                                if constrained_columns
+                                else "fk"
+                            ),
                             "source_columns": constrained_columns,
                             "target_columns": referred_columns,
                         }
@@ -559,9 +662,13 @@ class DashboardService:
 
             diagram_lines = ["Database schema graph:"]
             for node in nodes:
-                diagram_lines.append(f"- {node['label']} ({node['column_count']} cols, rows={node['row_count']})")
+                diagram_lines.append(
+                    f"- {node['label']} ({node['column_count']} cols, rows={node['row_count']})"
+                )
             for edge in edges:
-                diagram_lines.append(f"  {edge['source']} -> {edge['target']} [{edge['label']}]")
+                diagram_lines.append(
+                    f"  {edge['source']} -> {edge['target']} [{edge['label']}]"
+                )
 
             return {
                 "generated_at": self._serialize_datetime(datetime.utcnow()),
@@ -591,7 +698,11 @@ class DashboardService:
 
     def _extract_mcp_tools(self, run: PipelineRun) -> list[str]:
         tool_names = []
-        payloads = [run.input_payload or {}, run.output_payload or {}, run.metadata_json or {}]
+        payloads = [
+            run.input_payload or {},
+            run.output_payload or {},
+            run.metadata_json or {},
+        ]
         for payload in payloads:
             tool_name = payload.get("tool")
             if tool_name:
@@ -719,10 +830,42 @@ class DashboardService:
             "items": seeded_entities,
             "relationships": seeded_relationships,
             "catalog": {
-                "organizations": [{"id": "org-1", "name": "Police Grand-Ducale", "type": "Organization", "created_at": None, "updated_at": None}],
-                "organizational_units": [{"id": "unit-1", "name": "Direction centrale stratégie et performance", "type": "OrganizationalUnit", "created_at": None, "updated_at": None}],
-                "locations": [{"id": "loc-1", "name": "Luxembourg", "type": "Location", "created_at": None, "updated_at": None}],
-                "frameworks": [{"id": "fw-1", "name": "ISO/IEC 27001", "type": "Framework", "created_at": None, "updated_at": None}],
+                "organizations": [
+                    {
+                        "id": "org-1",
+                        "name": "Police Grand-Ducale",
+                        "type": "Organization",
+                        "created_at": None,
+                        "updated_at": None,
+                    }
+                ],
+                "organizational_units": [
+                    {
+                        "id": "unit-1",
+                        "name": "Direction centrale stratégie et performance",
+                        "type": "OrganizationalUnit",
+                        "created_at": None,
+                        "updated_at": None,
+                    }
+                ],
+                "locations": [
+                    {
+                        "id": "loc-1",
+                        "name": "Luxembourg",
+                        "type": "Location",
+                        "created_at": None,
+                        "updated_at": None,
+                    }
+                ],
+                "frameworks": [
+                    {
+                        "id": "fw-1",
+                        "name": "ISO/IEC 27001",
+                        "type": "Framework",
+                        "created_at": None,
+                        "updated_at": None,
+                    }
+                ],
                 "authorities": [],
             },
             "fallback": True,
@@ -740,7 +883,11 @@ class DashboardService:
                 "messages_by_role": {"assistant": 2, "system": 1, "user": 2},
                 "messages_by_model": {"claude-3-5-sonnet": 2, "gpt-4o": 3},
                 "finish_reasons": {"stop": 4, "tool_calls": 1},
-                "token_usage": {"prompt_tokens": 2200, "completion_tokens": 960, "total_tokens": 3160},
+                "token_usage": {
+                    "prompt_tokens": 2200,
+                    "completion_tokens": 960,
+                    "total_tokens": 3160,
+                },
             },
             "sessions": [
                 {
@@ -761,8 +908,8 @@ class DashboardService:
                     "title": "Rédaction lettre de motivation",
                     "session_type": "cover_letter_generation",
                     "status": "closed",
-                    "model_name": "claude-3-5-sonnet",
-                    "provider_name": "Anthropic",
+                    "model_name": "gpt-4o-mini",
+                    "provider_name": "OpenAI",
                     "message_count": 2,
                     "roles": {"assistant": 1, "user": 1},
                     "metadata": {"source": "dashboard_fallback_seed"},
@@ -782,7 +929,11 @@ class DashboardService:
                     "role": "system",
                     "content_preview": "Tu es un assistant RH et cybersécurité chargé d'analyser l'adéquation du candidat.",
                     "finish_reason": "stop",
-                    "token_usage": {"prompt_tokens": 500, "completion_tokens": 0, "total_tokens": 500},
+                    "token_usage": {
+                        "prompt_tokens": 500,
+                        "completion_tokens": 0,
+                        "total_tokens": 500,
+                    },
                     "metadata": {"source": "dashboard_fallback_seed"},
                     "created_at": now,
                 },
@@ -797,7 +948,11 @@ class DashboardService:
                     "role": "user",
                     "content_preview": "Compare mon CV avec l'offre Police Grand-Ducale et identifie les écarts clés.",
                     "finish_reason": "tool_calls",
-                    "token_usage": {"prompt_tokens": 900, "completion_tokens": 0, "total_tokens": 900},
+                    "token_usage": {
+                        "prompt_tokens": 900,
+                        "completion_tokens": 0,
+                        "total_tokens": 900,
+                    },
                     "metadata": {"source": "dashboard_fallback_seed"},
                     "created_at": now,
                 },
@@ -817,10 +972,10 @@ class DashboardService:
                 },
                 {
                     "id": "model-2",
-                    "name": "claude-3-5-sonnet",
-                    "model_family": "claude-3",
-                    "provider_name": "Anthropic",
-                    "context_window": 200000,
+                    "name": "gpt-4o-mini",
+                    "model_family": "gpt-4o",
+                    "provider_name": "OpenAI",
+                    "context_window": 128000,
                     "supports_streaming": True,
                     "is_default": False,
                     "metadata": {"source": "dashboard_fallback_seed"},
@@ -843,12 +998,12 @@ class DashboardService:
                 },
                 {
                     "id": "secret-2",
-                    "name": "ANTHROPIC_API_KEY",
+                    "name": "OPENAI_API_KEY",
                     "secret_type": "api_key",
                     "value_masked": "sk-ant-****5678",
                     "storage_backend": "env",
                     "is_active": True,
-                    "description": "Clé Anthropic masquée",
+                    "description": "Clé OpenAI masquée",
                     "metadata": {"source": "dashboard_fallback_seed"},
                     "created_at": now,
                     "updated_at": now,
@@ -857,7 +1012,12 @@ class DashboardService:
             "fallback": True,
         }
 
-    def _fallback_mcp_status_detail(self, pipeline_runs: list[Any], services: list[Any], github_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    def _fallback_mcp_status_detail(
+        self,
+        pipeline_runs: list[Any],
+        services: list[Any],
+        github_runs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         run_items = [
             {
                 "id": run.run_id,
@@ -901,7 +1061,7 @@ class DashboardService:
             {"tool_name": "mcp.osint_entities", "observed_count": 1},
             {"tool_name": "mcp.generate_master_prompt", "observed_count": 1},
             {"tool_name": "mcp.career_strategy_openai", "observed_count": 1},
-            {"tool_name": "mcp.career_strategy_anthropic", "observed_count": 1},
+            {"tool_name": "mcp.career_strategy_openai_agents", "observed_count": 1},
             {"tool_name": "mcp.generate_final_report_pdf", "observed_count": 1},
         ]
         return {
@@ -914,7 +1074,9 @@ class DashboardService:
                 "github_workflow_runs": len(github_runs),
                 "github_jobs": 0,
                 "tool_count": len(tool_list),
-                "run_statuses": dict(sorted(Counter(run.status for run in pipeline_runs).items())),
+                "run_statuses": dict(
+                    sorted(Counter(run.status for run in pipeline_runs).items())
+                ),
                 "event_types": {},
             },
             "tools": tool_list,
@@ -934,9 +1096,27 @@ class DashboardService:
                 "column_count": 7,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "name", "type": "VARCHAR(100)", "nullable": False, "default": None, "primary_key": False},
-                    {"name": "provider_type", "type": "VARCHAR(100)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "name",
+                        "type": "VARCHAR(100)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "provider_type",
+                        "type": "VARCHAR(100)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -945,9 +1125,27 @@ class DashboardService:
                 "column_count": 8,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "provider_id", "type": "INTEGER", "nullable": True, "default": None, "primary_key": False},
-                    {"name": "name", "type": "VARCHAR(150)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "provider_id",
+                        "type": "INTEGER",
+                        "nullable": True,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "name",
+                        "type": "VARCHAR(150)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -956,9 +1154,27 @@ class DashboardService:
                 "column_count": 7,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "llm_model_id", "type": "INTEGER", "nullable": True, "default": None, "primary_key": False},
-                    {"name": "title", "type": "VARCHAR(255)", "nullable": True, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "llm_model_id",
+                        "type": "INTEGER",
+                        "nullable": True,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "title",
+                        "type": "VARCHAR(255)",
+                        "nullable": True,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -967,9 +1183,27 @@ class DashboardService:
                 "column_count": 8,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "chat_session_id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": False},
-                    {"name": "role", "type": "VARCHAR(50)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "chat_session_id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "role",
+                        "type": "VARCHAR(50)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -978,9 +1212,27 @@ class DashboardService:
                 "column_count": 11,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "organization_id", "type": "INTEGER", "nullable": True, "default": None, "primary_key": False},
-                    {"name": "entity_type", "type": "VARCHAR(100)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "organization_id",
+                        "type": "INTEGER",
+                        "nullable": True,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "entity_type",
+                        "type": "VARCHAR(100)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -989,9 +1241,27 @@ class DashboardService:
                 "column_count": 7,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "source_entity_id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": False},
-                    {"name": "target_entity_id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "source_entity_id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "target_entity_id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -1000,9 +1270,27 @@ class DashboardService:
                 "column_count": 10,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "run_type", "type": "VARCHAR(50)", "nullable": False, "default": None, "primary_key": False},
-                    {"name": "status", "type": "VARCHAR(50)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "run_type",
+                        "type": "VARCHAR(50)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "status",
+                        "type": "VARCHAR(50)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
             {
@@ -1011,20 +1299,80 @@ class DashboardService:
                 "column_count": 10,
                 "row_count": None,
                 "columns": [
-                    {"name": "id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": True},
-                    {"name": "pipeline_run_id", "type": "INTEGER", "nullable": False, "default": None, "primary_key": False},
-                    {"name": "service_name", "type": "VARCHAR(100)", "nullable": False, "default": None, "primary_key": False},
+                    {
+                        "name": "id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": True,
+                    },
+                    {
+                        "name": "pipeline_run_id",
+                        "type": "INTEGER",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
+                    {
+                        "name": "service_name",
+                        "type": "VARCHAR(100)",
+                        "nullable": False,
+                        "default": None,
+                        "primary_key": False,
+                    },
                 ],
             },
         ]
         edges = [
-            {"source": "llm_models", "target": "providers", "label": "provider_id", "source_columns": ["provider_id"], "target_columns": ["id"]},
-            {"source": "chat_sessions", "target": "llm_models", "label": "llm_model_id", "source_columns": ["llm_model_id"], "target_columns": ["id"]},
-            {"source": "chat_messages", "target": "chat_sessions", "label": "chat_session_id", "source_columns": ["chat_session_id"], "target_columns": ["id"]},
-            {"source": "business_entities", "target": "organizations", "label": "organization_id", "source_columns": ["organization_id"], "target_columns": ["id"]},
-            {"source": "entity_relationships", "target": "business_entities", "label": "source_entity_id", "source_columns": ["source_entity_id"], "target_columns": ["id"]},
-            {"source": "entity_relationships", "target": "business_entities", "label": "target_entity_id", "source_columns": ["target_entity_id"], "target_columns": ["id"]},
-            {"source": "service_runs", "target": "pipeline_runs", "label": "pipeline_run_id", "source_columns": ["pipeline_run_id"], "target_columns": ["id"]},
+            {
+                "source": "llm_models",
+                "target": "providers",
+                "label": "provider_id",
+                "source_columns": ["provider_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "chat_sessions",
+                "target": "llm_models",
+                "label": "llm_model_id",
+                "source_columns": ["llm_model_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "chat_messages",
+                "target": "chat_sessions",
+                "label": "chat_session_id",
+                "source_columns": ["chat_session_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "business_entities",
+                "target": "organizations",
+                "label": "organization_id",
+                "source_columns": ["organization_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "entity_relationships",
+                "target": "business_entities",
+                "label": "source_entity_id",
+                "source_columns": ["source_entity_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "entity_relationships",
+                "target": "business_entities",
+                "label": "target_entity_id",
+                "source_columns": ["target_entity_id"],
+                "target_columns": ["id"],
+            },
+            {
+                "source": "service_runs",
+                "target": "pipeline_runs",
+                "label": "pipeline_run_id",
+                "source_columns": ["pipeline_run_id"],
+                "target_columns": ["id"],
+            },
         ]
         diagram_text = "\n".join(
             [

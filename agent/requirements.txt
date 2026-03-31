@@ -1,4 +1,3 @@
-anthropic
 openai
 requests
 beautifulsoup4

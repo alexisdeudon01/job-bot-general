@@ -10,13 +10,6 @@ class GenerationPaths:
 
 
 @dataclass
-class ProviderModelInfo:
-    id: str
-    output_token_limit: Optional[int] = None
-    input_token_limit: Optional[int] = None
-
-
-@dataclass
 class ProviderResult:
     provider: str
     status: str
@@ -42,6 +35,5 @@ class GenerationContext:
     job_data: Dict[str, Any]
     original_cv: str
     prompt: str
-    anthropic_model: Optional[ProviderModelInfo] = None
     openai_model: Optional[str] = None
     results: Dict[str, Dict[str, Any]] = field(default_factory=dict)
