@@ -14,12 +14,6 @@ def get_provider_statuses() -> list[ServiceStatus]:
             metadata={"checked_at": timestamp},
         ),
         ServiceStatus(
-            name="redis",
-            status="unknown",
-            detail="Intégration cache/queue à brancher",
-            metadata={"checked_at": timestamp},
-        ),
-        ServiceStatus(
             name="llm-provider",
             status="stub",
             detail="Provider IA non configuré pour le moment",
