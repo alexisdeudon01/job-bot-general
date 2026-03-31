@@ -73,7 +73,7 @@ class PipelineService:
         steps: list[PipelineStepResult] = []
 
         # ── Step 1: Scrape job URL via OpenAI Agents SDK + ScrapeGraph MCP ───
-        job_content = ""
+        job_content: str | dict[str, Any] = ""
         scrape_tool = "none"
         scrape_status = "skipped"
         scrape_detail = "No job URL provided"
@@ -100,7 +100,12 @@ class PipelineService:
                         ),
                         mcp_server_configs=[scrapegraph_cfg],
                     )
-                    job_content = agent_result.get("text", "")
+                    job_content = (
+                        agent_result.get("text")
+                        or agent_result.get("output")
+                        or agent_result.get("result")
+                        or ""
+                    )
                     scrape_tool = f"openai_agents + scrapegraph.markdownify (MCP stdio, model={agent_result.get('model','')})"
                     scrape_status = "completed"
                     scrape_detail = f"Job page scraped via OpenAI Agents SDK + ScrapeGraph MCP ({len(job_content)} chars)"
@@ -135,8 +140,12 @@ class PipelineService:
                 output={
                     "tool": scrape_tool,
                     "job_url": job_url or "(not provided)",
-                    "content_length": len(job_content),
-                    "content_preview": job_content[:600] if job_content else "",
+                    "content_length": len(self._stringify_content(job_content)),
+                    "content_preview": (
+                        self._stringify_content(job_content)[:600]
+                        if job_content
+                        else ""
+                    ),
                 },
             )
         )
@@ -311,7 +320,7 @@ class PipelineService:
     def _generate_cover_letter(
         self,
         *,
-        job_content: str,
+        job_content: str | dict[str, Any],
         job_url: str,
         cv_text: str,
         model: str,
@@ -321,9 +330,10 @@ class PipelineService:
 
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+        job_content_text = self._stringify_content(job_content)
         job_section = ""
-        if job_content:
-            job_section = f"Contenu de l'offre d'emploi:\n{job_content[:4000]}"
+        if job_content_text:
+            job_section = f"Contenu de l'offre d'emploi:\n{job_content_text[:4000]}"
         elif job_url:
             job_section = f"URL de l'offre d'emploi: {job_url}\n(Contenu non disponible — rédige une lettre générique adaptée au poste si possible.)"
         else:
@@ -375,7 +385,7 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
     def _generate_cover_letter_agents(
         self,
         *,
-        job_content: str,
+        job_content: str | dict[str, Any],
         job_url: str,
         cv_text: str,
         model: str,
@@ -386,9 +396,10 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
         """
         from app.services.openai_agents_service import openai_agents_service
 
+        job_content_text = self._stringify_content(job_content)
         job_section = ""
-        if job_content:
-            job_section = f"Contenu de l'offre d'emploi:\n{job_content[:4000]}"
+        if job_content_text:
+            job_section = f"Contenu de l'offre d'emploi:\n{job_content_text[:4000]}"
         elif job_url:
             job_section = f"URL de l'offre d'emploi: {job_url}"
         else:
@@ -433,7 +444,7 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
     def _assess_fit(
         self,
         *,
-        job_content: str,
+        job_content: str | dict[str, Any],
         job_url: str,
         cv_text: str,
         model: str,
@@ -443,9 +454,10 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
 
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+        job_content_text = self._stringify_content(job_content)
         job_section = (
-            f"Offre d'emploi:\n{job_content[:3000]}"
-            if job_content
+            f"Offre d'emploi:\n{job_content_text[:3000]}"
+            if job_content_text
             else f"URL: {job_url}"
         )
         cv_section = f"CV:\n{cv_text[:2000]}" if cv_text else "CV: Non fourni."
@@ -479,6 +491,31 @@ Sois concis et structuré."""
 
         assessment = response.choices[0].message.content or ""
         return assessment, prompt
+
+    @staticmethod
+    def _stringify_content(value: str | dict[str, Any] | Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            markdown = value.get("markdown")
+            if isinstance(markdown, str) and markdown.strip():
+                return markdown
+            result = value.get("result")
+            if isinstance(result, str) and result.strip():
+                return result
+            if isinstance(result, dict):
+                nested_md = result.get("markdown")
+                if isinstance(nested_md, str) and nested_md.strip():
+                    return nested_md
+            try:
+                import json
+
+                return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+            except Exception:
+                return str(value)
+        if value is None:
+            return ""
+        return str(value)
 
     def _build_run(
         self,
