@@ -219,3 +219,5 @@ def _read_float_env(name: str, *, default: float) -> float:
 
 
 openai_service = OpenAIService()
+    """_summary_
+    """
