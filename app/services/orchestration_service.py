@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Protocol, runtime_checkable
 
-from mcp_server.clients.scrapegraph_stdio_client import ScrapeGraphStdioClient
-from mcp_server.services.scrapegraph_service import ScrapeGraphService
+from mcp_host.clients.scrapegraph_client import ScrapegraphMCPClient
 from app.services.openai_agents_service import MCPServerConfig, OpenAIAgentsService
 
 
@@ -171,8 +171,8 @@ class OrchestrationService:
         )
 
     @cached_property
-    def _stdio_client(self) -> ScrapeGraphStdioClient:
-        return ScrapeGraphStdioClient(ScrapeGraphService())
+    def _stdio_client(self) -> ScrapegraphMCPClient:
+        return ScrapegraphMCPClient()
 
     def describe_routing_capabilities(self) -> dict[str, Any]:
         openai_caps = self.openai_service.describe_capabilities() if self.openai_service else {}
@@ -248,17 +248,17 @@ class OrchestrationService:
             if output_schema:
                 agent_prompt += f"\nExpected schema: {json.dumps(output_schema)}"
             return self.openai_agents_service.run_agent(prompt=agent_prompt)  # type: ignore[union-attr]
-        return self._stdio_client.call_tool(
+        return asyncio.run(self._stdio_client.call_tool(
             "smartscraper",
             {"website_url": url, "user_prompt": prompt, "output_schema": output_schema},
-        )
+        ))
 
     def markdownify(self, *, url: str, use_agents_sdk: bool = True) -> dict[str, Any]:
         if use_agents_sdk and _is_provider_ready(self.openai_agents_service):
             return self.openai_agents_service.run_agent(  # type: ignore[union-attr]
                 prompt=f"Convert the following URL to clean markdown format.\nURL: {url}"
             )
-        return self._stdio_client.call_tool("markdownify", {"website_url": url})
+        return asyncio.run(self._stdio_client.call_tool("markdownify", {"website_url": url}))
 
 
 def _provider_info(service: Any, name: str) -> dict[str, Any]:
