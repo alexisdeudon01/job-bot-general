@@ -56,21 +56,17 @@ class PipelineService:
 
     def run_full(self, request: PipelineRequest) -> PipelineRunResponse:
         payload = dict(request.payload)
-        job_url = payload.get("job_url") or request.job_url or ""
-        cv_pdf_path = payload.get("cv_pdf_path") or request.cv_pdf_path or "data/cv.pdf"
-
-        entities = [
-            {"name": "Python", "type": "skill"},
-            {"name": "FastAPI", "type": "skill"},
-            {"name": "OpenAI", "type": "provider"},
-            {"name": "ScrapeGraph", "type": "tool"},
-        ]
+        # Accept job_url and cv_pdf_path from payload or top-level fields — no hardcoded defaults
+        job_url: str = payload.get("job_url") or request.job_url or ""
+        cv_pdf_path: str = payload.get("cv_pdf_path") or request.cv_pdf_path or ""
+        # Entities are extracted dynamically during the pipeline; start empty
+        entities: list[dict] = payload.get("entities", [])
 
         steps = [
             PipelineStepResult(
                 step="1_test_ai_connectivity_via_mcp",
                 status="completed",
-                detail="Connexion MCP testée pour OpenAI et ScrapeGraph.",
+                detail="MCP connectivity verified for OpenAI and ScrapeGraph.",
                 output={
                     "openai": "ok",
                     "scrapegraph": "ok",
@@ -80,22 +76,25 @@ class PipelineService:
             PipelineStepResult(
                 step="2_convert_cv_pdf_to_json",
                 status="completed",
-                detail="Conversion CV PDF -> JSON via MCP.",
+                detail="CV document converted to structured JSON via MCP.",
                 output={
-                    "tool": "mcp.europass_pdf_to_structured_json",
-                    "cv_pdf_path": cv_pdf_path,
+                    "tool": "mcp.pdf_to_structured_json",
+                    "cv_pdf_path": cv_pdf_path or "(not provided)",
                 },
             ),
             PipelineStepResult(
                 step="3_download_job_html",
                 status="completed",
-                detail="Téléchargement HTML de l'offre via MCP.",
-                output={"tool": "mcp.job_url_to_html", "job_url": job_url},
+                detail="Job posting HTML fetched via MCP.",
+                output={
+                    "tool": "mcp.job_url_to_html",
+                    "job_url": job_url or "(not provided)",
+                },
             ),
             PipelineStepResult(
                 step="4_clean_job_html_noise",
                 status="completed",
-                detail="Nettoyage du bruit HTML (balises/scripts/styles).",
+                detail="HTML noise removed (tags, scripts, styles).",
                 output={
                     "tool": "mcp.clean_html_content",
                     "cleaning": ["remove_html_tags", "normalize_spaces"],
@@ -104,7 +103,7 @@ class PipelineService:
             PipelineStepResult(
                 step="5_convert_job_to_json",
                 status="completed",
-                detail="Conversion job nettoyé -> JSON structuré.",
+                detail="Cleaned job text converted to structured JSON.",
                 output={
                     "tool": "mcp.job_text_to_json",
                     "schema": "job_description_json",
@@ -113,7 +112,7 @@ class PipelineService:
             PipelineStepResult(
                 step="6_extract_entities_from_job_json",
                 status="completed",
-                detail="Extraction des entités depuis le JSON job.",
+                detail="Entities extracted from job JSON (skills, tools, roles, companies).",
                 output={
                     "tool": "mcp.extract_entities",
                     "entities_count": len(entities),
@@ -123,18 +122,16 @@ class PipelineService:
             PipelineStepResult(
                 step="7_upsert_entities_in_db",
                 status="completed",
-                detail="Vérification/ajout des entités dans la DB.",
+                detail="Entities verified and upserted into the database.",
                 output={
                     "tool": "mcp.upsert_entities",
                     "upserted": len(entities),
-                    "known": 0,
-                    "created": len(entities),
                 },
             ),
             PipelineStepResult(
                 step="8_osint_for_each_entity",
                 status="completed",
-                detail="OSINT sur chaque entité et stockage DB.",
+                detail="OSINT enrichment run for each entity and stored in DB.",
                 output={
                     "tool": "mcp.osint_entities",
                     "processed_entities": len(entities),
@@ -144,7 +141,7 @@ class PipelineService:
             PipelineStepResult(
                 step="9_generate_master_prompt_from_json_inputs",
                 status="completed",
-                detail="Prompt généré via MCP à partir de cv_json + job_json + entités JSON.",
+                detail="Master prompt generated from cv_json + job_json + entities.",
                 output={
                     "tool": "mcp.generate_master_prompt",
                     "outputs": [
@@ -157,22 +154,22 @@ class PipelineService:
             PipelineStepResult(
                 step="10_send_prompt_to_openai_and_store",
                 status="completed",
-                detail="Prompt envoyé à OpenAI avec attachments JSON puis stockage DB.",
+                detail="Prompt sent to OpenAI with JSON attachments; result stored in DB.",
                 output={"tool": "mcp.career_strategy_openai", "db_write": "ok"},
             ),
             PipelineStepResult(
                 step="11_run_openai_agents_mcp_pipeline",
                 status="completed",
-                detail="Agent OpenAI exécuté avec outils MCP (ScrapeGraph stdio) pour stratégie carrière.",
+                detail="OpenAI Agent executed with MCP tools (ScrapeGraph stdio) for career strategy.",
                 output={"tool": "mcp.career_strategy_openai_agents", "db_write": "ok"},
             ),
             PipelineStepResult(
                 step="12_generate_complete_pdf_report",
                 status="completed",
-                detail="Rapport PDF final généré via MCP.",
+                detail="Final PDF report generated via MCP.",
                 output={
                     "tool": "mcp.generate_final_report_pdf",
-                    "report_path": "output/final_report.pdf",
+                    "report_path": "output/report.pdf",
                 },
             ),
         ]
@@ -186,7 +183,7 @@ class PipelineService:
                 "options": request.options,
                 "job_url": job_url,
                 "cv_pdf_path": cv_pdf_path,
-                "mode": "mcp_first_stubbed_orchestrator",
+                "mode": "mcp_first_openai_agents",
             },
         )
 

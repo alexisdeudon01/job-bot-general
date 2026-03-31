@@ -127,7 +127,7 @@ def init_session_state() -> None:
     if "job_url_input" not in st.session_state:
         st.session_state.job_url_input = ""
     if "cv_pdf_input" not in st.session_state:
-        st.session_state.cv_pdf_input = "data/cv.pdf"
+        st.session_state.cv_pdf_input = ""
     if "dashboard_active_page" not in st.session_state:
         st.session_state.dashboard_active_page = "app"
 
@@ -162,12 +162,12 @@ def _render_app_page(client: ApiClient) -> None:
             placeholder="https://company.com/jobs/123",
         )
         st.session_state.cv_pdf_input = st.text_input(
-            "Chemin CV PDF",
+            "CV document path (PDF)",
             value=st.session_state.cv_pdf_input,
-            placeholder="data/cv.pdf",
+            placeholder="/path/to/your/cv.pdf  (optional)",
         )
 
-        run_clicked = st.button("Lancer pipeline 12 étapes", type="primary", use_container_width=True)
+        run_clicked = st.button("Run 12-step pipeline", type="primary", use_container_width=True)
 
     if run_clicked:
         payload = {
