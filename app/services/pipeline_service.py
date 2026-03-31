@@ -21,6 +21,34 @@ class PipelineService:
     def __init__(self) -> None:
         self._runs: list[PipelineRunSummary] = []
 
+    def _resolve_cv_path(self, cv_pdf_path: str) -> str | None:
+        """
+        Resolve and validate a user-supplied CV path so that it stays within a
+        dedicated base directory. Returns an absolute, normalized path or None
+        if the input is invalid.
+        """
+        if not cv_pdf_path:
+            return None
+
+        # Base directory for CV PDFs; can be overridden via environment
+        base_dir = os.environ.get("CV_UPLOAD_DIR", os.path.join(os.getcwd(), "uploads", "cv"))
+        base_dir_abs = os.path.abspath(base_dir)
+
+        # Join and normalize to eliminate ".." etc.
+        candidate = os.path.normpath(os.path.join(base_dir_abs, cv_pdf_path))
+
+        # Ensure the resolved path is still under the base directory
+        # using commonpath for robustness across platforms.
+        try:
+            common = os.path.commonpath([base_dir_abs, candidate])
+        except ValueError:
+            return None
+
+        if common != base_dir_abs:
+            return None
+
+        return candidate
+
     # ──────────────────────────────────────────────────────────────────────────
     # Public API
     # ──────────────────────────────────────────────────────────────────────────
@@ -169,11 +197,15 @@ class PipelineService:
         cv_detail = "No CV path provided"
 
         if cv_pdf_path:
-            if os.path.exists(cv_pdf_path):
+            safe_cv_path = self._resolve_cv_path(cv_pdf_path)
+            if safe_cv_path is None:
+                cv_status = "failed"
+                cv_detail = "Invalid CV path"
+            elif os.path.exists(safe_cv_path):
                 try:
                     import pdfplumber
 
-                    with pdfplumber.open(cv_pdf_path) as pdf:
+                    with pdfplumber.open(safe_cv_path) as pdf:
                         cv_text = "\n".join(
                             page.extract_text() or "" for page in pdf.pages
                         )
