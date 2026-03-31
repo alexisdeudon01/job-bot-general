@@ -1,0 +1,1 @@
+"""MCP Host — Core package."""
