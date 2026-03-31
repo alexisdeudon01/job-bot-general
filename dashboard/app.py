@@ -203,6 +203,23 @@ def _render_step(step: dict[str, Any], idx: int) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _save_uploaded_cv(uploaded_file: Any) -> str:
+    """Save an uploaded CV file to the shared /data/ volume and return the path."""
+    import os
+    import tempfile
+
+    # Try shared data volume first (accessible by both dashboard and orchestrator containers)
+    data_dir = "/data"
+    if not os.path.exists(data_dir):
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+    cv_path = os.path.join(data_dir, "cv_upload.pdf")
+    with open(cv_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return cv_path
+
+
 def _render_app_page(client: ApiClient) -> None:
     st.title("🚀 Générateur de lettre de motivation")
     st.caption(
@@ -213,22 +230,27 @@ def _render_app_page(client: ApiClient) -> None:
     # ── Input form ────────────────────────────────────────────────────────────
     with st.container(border=True):
         st.subheader("📋 Entrées")
-        col_url, col_cv = st.columns([2, 1])
 
-        with col_url:
-            st.session_state.job_url_input = st.text_input(
-                "🔗 URL de l'offre d'emploi",
-                value=st.session_state.job_url_input,
-                placeholder="https://company.com/jobs/software-engineer",
-                help="URL complète de l'offre d'emploi à analyser",
+        st.session_state.job_url_input = st.text_input(
+            "🔗 URL de l'offre d'emploi",
+            value=st.session_state.job_url_input,
+            placeholder="https://company.com/jobs/software-engineer",
+            help="URL complète de l'offre d'emploi à analyser",
+        )
+
+        col_cv_upload, col_cv_path = st.columns([1, 1])
+        with col_cv_upload:
+            uploaded_cv = st.file_uploader(
+                "📎 Uploader votre CV (PDF)",
+                type=["pdf"],
+                help="Glissez-déposez votre CV en PDF",
             )
-
-        with col_cv:
+        with col_cv_path:
             st.session_state.cv_pdf_input = st.text_input(
-                "📄 Chemin vers votre CV (PDF)",
+                "📄 Ou chemin vers votre CV (PDF)",
                 value=st.session_state.cv_pdf_input,
-                placeholder="/path/to/cv.pdf  (optionnel)",
-                help="Chemin absolu vers votre CV en PDF",
+                placeholder="/data/cv.pdf  (optionnel)",
+                help="Chemin absolu vers votre CV en PDF (si déjà sur le serveur)",
             )
 
         run_clicked = st.button(
@@ -240,11 +262,21 @@ def _render_app_page(client: ApiClient) -> None:
     # ── Pipeline execution with progress ─────────────────────────────────────
     if run_clicked:
         job_url = str(st.session_state.job_url_input or "").strip()
-        cv_path = str(st.session_state.cv_pdf_input or "").strip()
 
         if not job_url:
             st.warning("⚠️ Veuillez entrer une URL d'offre d'emploi.")
             return
+
+        # Handle CV: uploaded file takes priority over path
+        cv_path = ""
+        if uploaded_cv is not None:
+            try:
+                cv_path = _save_uploaded_cv(uploaded_cv)
+                st.info(f"✅ CV uploadé : {uploaded_cv.name} → {cv_path}")
+            except Exception as exc:
+                st.warning(f"⚠️ Impossible de sauvegarder le CV : {exc}")
+        elif str(st.session_state.cv_pdf_input or "").strip():
+            cv_path = str(st.session_state.cv_pdf_input or "").strip()
 
         payload = {
             "source": "dashboard",
@@ -255,7 +287,7 @@ def _render_app_page(client: ApiClient) -> None:
             "options": {"mode": "mcp_first_openai_agents"},
         }
 
-        # Show animated progress while waiting for the backend
+        # Show animated progress while waiting for the backend (up to 120s)
         progress_placeholder = st.empty()
         with progress_placeholder.container():
             with st.status(
@@ -271,14 +303,16 @@ def _render_app_page(client: ApiClient) -> None:
                     "🤖 Étape 3 — Génération de la lettre de motivation via OpenAI..."
                 )
                 st.write("🎯 Étape 4 — Analyse d'adéquation candidat/poste...")
+                st.caption("⏳ Cela peut prendre 15-30 secondes selon OpenAI...")
 
-                result = client.post_json(
+                # Use pipeline_timeout (120s) to avoid "API unreachable" on slow OpenAI calls
+                result = client.post_pipeline(
                     "/api/v1/pipeline/full",
                     payload=payload,
                     fallback={
                         "status": "failed",
                         "steps": [],
-                        "error": "API unreachable",
+                        "error": "API unreachable — timeout dépassé",
                     },
                 )
 

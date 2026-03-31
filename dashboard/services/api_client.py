@@ -21,9 +21,15 @@ DEFAULT_API_BASE_URL = os.getenv("DASHBOARD_API_BASE_URL", "http://localhost:800
 class ApiClient:
     """Thin route-driven dashboard API client with minimal fallback support."""
 
-    def __init__(self, base_url: str | None = None, timeout: float = 10.0):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout: float = 10.0,
+        pipeline_timeout: float = 120.0,
+    ):
         self.base_url = (base_url or DEFAULT_API_BASE_URL).rstrip("/")
         self.timeout = timeout
+        self.pipeline_timeout = pipeline_timeout
         self._overview_cache: dict[str, Any] | None = None
 
     def is_available(self) -> bool:
@@ -52,20 +58,35 @@ class ApiClient:
             logger.warning("Failed to fetch dashboard API path %s: %s", path, exc)
             return fallback_payload
 
-    def post_json(self, path: str, payload: Any = None, fallback: Any = None) -> Any:
+    def post_json(
+        self,
+        path: str,
+        payload: Any = None,
+        fallback: Any = None,
+        timeout: float | None = None,
+    ) -> Any:
         """POST JSON payload to the given path and return the parsed response."""
         fallback_payload = self._clone_fallback(fallback)
         if httpx is None:
             return fallback_payload
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         try:
-            with httpx.Client(timeout=self.timeout) as client:
+            with httpx.Client(timeout=effective_timeout) as client:
                 response = client.post(self.build_url(path), json=payload)
                 response.raise_for_status()
                 return response.json()
         except (httpx.HTTPError, httpx.TimeoutException, ValueError) as exc:
             logger.warning("Failed to POST to dashboard API path %s: %s", path, exc)
             return fallback_payload
+
+    def post_pipeline(
+        self, path: str, payload: Any = None, fallback: Any = None
+    ) -> Any:
+        """POST to a pipeline endpoint with extended timeout (120s for OpenAI calls)."""
+        return self.post_json(
+            path, payload=payload, fallback=fallback, timeout=self.pipeline_timeout
+        )
 
     def fetch_health(self) -> dict[str, Any]:
         fallback = {"status": "unreachable", "source": "fallback"}

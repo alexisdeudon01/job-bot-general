@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from app.services.openai_agents_service import MCPServerConfig
 
 from app.schemas.pipeline import (
     PipelineRequest,
@@ -68,38 +72,74 @@ class PipelineService:
 
         steps: list[PipelineStepResult] = []
 
-        # ── Step 1: Scrape job URL via ScrapeGraph MCP ────────────────────────
+        # ── Step 1: Scrape job URL via OpenAI Agents SDK + ScrapeGraph MCP ───
         job_content = ""
         scrape_tool = "none"
         scrape_status = "skipped"
         scrape_detail = "No job URL provided"
 
         if job_url:
-            try:
-                from mcp_server.services.scrapegraph_service import ScrapeGraphService
-                sg = ScrapeGraphService()
-                result = sg.markdownify_job_page(job_url)
-                job_content = result.get("markdown", "")
-                scrape_tool = "scrapegraph.markdownify (MCP stdio)"
-                scrape_status = "completed"
-                scrape_detail = f"Job page scraped via ScrapeGraph MCP ({len(job_content)} chars)"
-            except Exception as exc:
-                scrape_status = "failed"
-                scrape_tool = "scrapegraph.markdownify"
-                scrape_detail = f"ScrapeGraph unavailable: {str(exc)[:150]}"
-                job_content = ""
+            # Primary path: OpenAI Agents SDK with ScrapeGraph MCP (stdio)
+            agents_scrape_ok = False
+            if os.getenv("OPENAI_API_KEY") and os.getenv("SGAI_API_KEY"):
+                try:
+                    from app.services.openai_agents_service import openai_agents_service
 
-        steps.append(PipelineStepResult(
-            step="1_scrape_job_url",
-            status=scrape_status,
-            detail=scrape_detail,
-            output={
-                "tool": scrape_tool,
-                "job_url": job_url or "(not provided)",
-                "content_length": len(job_content),
-                "content_preview": job_content[:600] if job_content else "",
-            },
-        ))
+                    scrapegraph_cfg = (
+                        openai_agents_service.build_scrapegraph_stdio_config()
+                    )
+                    agent_result = openai_agents_service.run_agent(
+                        prompt=(
+                            f"Use the markdownify tool to scrape this job posting URL and return "
+                            f"the full markdown content of the page: {job_url}"
+                        ),
+                        instructions=(
+                            "You are a web scraping assistant. "
+                            "Use the available MCP tools to fetch and return the raw markdown content "
+                            "of the requested URL. Return only the markdown content, no commentary."
+                        ),
+                        mcp_server_configs=[scrapegraph_cfg],
+                    )
+                    job_content = agent_result.get("text", "")
+                    scrape_tool = f"openai_agents + scrapegraph.markdownify (MCP stdio, model={agent_result.get('model','')})"
+                    scrape_status = "completed"
+                    scrape_detail = f"Job page scraped via OpenAI Agents SDK + ScrapeGraph MCP ({len(job_content)} chars)"
+                    agents_scrape_ok = True
+                except Exception as exc:
+                    scrape_detail = f"OpenAI Agents+MCP scrape failed: {str(exc)[:150]}"
+
+            # Fallback: direct ScrapeGraph SDK call (no OpenAI Agents)
+            if not agents_scrape_ok:
+                try:
+                    from mcp_server.services.scrapegraph_service import (
+                        ScrapeGraphService,
+                    )
+
+                    sg = ScrapeGraphService()
+                    result = sg.markdownify_job_page(job_url)
+                    job_content = result.get("markdown", "")
+                    scrape_tool = "scrapegraph.markdownify (direct SDK fallback)"
+                    scrape_status = "completed"
+                    scrape_detail = f"Job page scraped via ScrapeGraph direct SDK ({len(job_content)} chars)"
+                except Exception as exc2:
+                    scrape_status = "failed"
+                    scrape_tool = "scrapegraph.markdownify"
+                    scrape_detail = f"ScrapeGraph unavailable: {str(exc2)[:150]}"
+                    job_content = ""
+
+        steps.append(
+            PipelineStepResult(
+                step="1_scrape_job_url",
+                status=scrape_status,
+                detail=scrape_detail,
+                output={
+                    "tool": scrape_tool,
+                    "job_url": job_url or "(not provided)",
+                    "content_length": len(job_content),
+                    "content_preview": job_content[:600] if job_content else "",
+                },
+            )
+        )
 
         # ── Step 2: Read CV PDF ───────────────────────────────────────────────
         cv_text = ""
@@ -110,6 +150,7 @@ class PipelineService:
             if os.path.exists(cv_pdf_path):
                 try:
                     import pdfplumber
+
                     with pdfplumber.open(cv_pdf_path) as pdf:
                         cv_text = "\n".join(
                             page.extract_text() or "" for page in pdf.pages
@@ -123,17 +164,19 @@ class PipelineService:
                 cv_status = "failed"
                 cv_detail = f"CV file not found: {cv_pdf_path}"
 
-        steps.append(PipelineStepResult(
-            step="2_read_cv_pdf",
-            status=cv_status,
-            detail=cv_detail,
-            output={
-                "tool": "pdfplumber",
-                "cv_pdf_path": cv_pdf_path or "(not provided)",
-                "cv_text_length": len(cv_text),
-                "cv_preview": cv_text[:400] if cv_text else "",
-            },
-        ))
+        steps.append(
+            PipelineStepResult(
+                step="2_read_cv_pdf",
+                status=cv_status,
+                detail=cv_detail,
+                output={
+                    "tool": "pdfplumber",
+                    "cv_pdf_path": cv_pdf_path or "(not provided)",
+                    "cv_text_length": len(cv_text),
+                    "cv_preview": cv_text[:400] if cv_text else "",
+                },
+            )
+        )
 
         # ── Step 3: Generate cover letter via OpenAI ──────────────────────────
         cover_letter = ""
@@ -144,34 +187,63 @@ class PipelineService:
         tools_called: list[str] = []
 
         if os.getenv("OPENAI_API_KEY"):
-            try:
-                cover_letter, prompt_used = self._generate_cover_letter(
-                    job_content=job_content,
-                    job_url=job_url,
-                    cv_text=cv_text,
-                    model=openai_model,
-                )
-                openai_status = "completed"
-                openai_detail = f"Cover letter generated by OpenAI {openai_model} ({len(cover_letter)} chars)"
-                tools_called = [f"openai.chat.completions ({openai_model})"]
-            except Exception as exc:
-                openai_status = "failed"
-                openai_detail = f"OpenAI generation failed: {str(exc)[:200]}"
-                cover_letter = f"Erreur: {str(exc)}"
+            # Primary path: OpenAI Agents SDK with ScrapeGraph MCP
+            agents_gen_ok = False
+            if os.getenv("SGAI_API_KEY"):
+                try:
+                    from app.services.openai_agents_service import openai_agents_service
 
-        steps.append(PipelineStepResult(
-            step="3_generate_cover_letter",
-            status=openai_status,
-            detail=openai_detail,
-            output={
-                "tool": f"openai.chat.completions ({openai_model})",
-                "model": openai_model,
-                "tools_called": tools_called,
-                "prompt_used": prompt_used,
-                "cover_letter": cover_letter,
-                "cover_letter_length": len(cover_letter),
-            },
-        ))
+                    scrapegraph_cfg = (
+                        openai_agents_service.build_scrapegraph_stdio_config()
+                    )
+                    cover_letter, prompt_used = self._generate_cover_letter_agents(
+                        job_content=job_content,
+                        job_url=job_url,
+                        cv_text=cv_text,
+                        model=openai_model,
+                        scrapegraph_cfg=scrapegraph_cfg,
+                    )
+                    openai_status = "completed"
+                    openai_detail = f"Cover letter generated via OpenAI Agents SDK + MCP ({len(cover_letter)} chars)"
+                    tools_called = [f"openai_agents ({openai_model}) + scrapegraph MCP"]
+                    agents_gen_ok = True
+                except Exception as exc:
+                    openai_detail = (
+                        f"Agents SDK generation failed, falling back: {str(exc)[:150]}"
+                    )
+
+            # Fallback: direct OpenAI chat completions
+            if not agents_gen_ok:
+                try:
+                    cover_letter, prompt_used = self._generate_cover_letter(
+                        job_content=job_content,
+                        job_url=job_url,
+                        cv_text=cv_text,
+                        model=openai_model,
+                    )
+                    openai_status = "completed"
+                    openai_detail = f"Cover letter generated by OpenAI {openai_model} ({len(cover_letter)} chars)"
+                    tools_called = [f"openai.chat.completions ({openai_model})"]
+                except Exception as exc:
+                    openai_status = "failed"
+                    openai_detail = f"OpenAI generation failed: {str(exc)[:200]}"
+                    cover_letter = f"Erreur: {str(exc)}"
+
+        steps.append(
+            PipelineStepResult(
+                step="3_generate_cover_letter",
+                status=openai_status,
+                detail=openai_detail,
+                output={
+                    "tool": f"openai.chat.completions ({openai_model})",
+                    "model": openai_model,
+                    "tools_called": tools_called,
+                    "prompt_used": prompt_used,
+                    "cover_letter": cover_letter,
+                    "cover_letter_length": len(cover_letter),
+                },
+            )
+        )
 
         # ── Step 4: Fit assessment ────────────────────────────────────────────
         fit_assessment = ""
@@ -193,17 +265,19 @@ class PipelineService:
                 fit_status = "failed"
                 fit_detail = f"Fit assessment failed: {str(exc)[:150]}"
 
-        steps.append(PipelineStepResult(
-            step="4_assess_fit",
-            status=fit_status,
-            detail=fit_detail,
-            output={
-                "tool": f"openai.chat.completions ({openai_model})",
-                "model": openai_model,
-                "prompt_used": fit_prompt,
-                "fit_assessment": fit_assessment,
-            },
-        ))
+        steps.append(
+            PipelineStepResult(
+                step="4_assess_fit",
+                status=fit_status,
+                detail=fit_detail,
+                output={
+                    "tool": f"openai.chat.completions ({openai_model})",
+                    "model": openai_model,
+                    "prompt_used": fit_prompt,
+                    "fit_assessment": fit_assessment,
+                },
+            )
+        )
 
         # Determine overall status
         statuses = {s.status for s in steps}
@@ -298,6 +372,64 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
         cover_letter = response.choices[0].message.content or ""
         return cover_letter, prompt
 
+    def _generate_cover_letter_agents(
+        self,
+        *,
+        job_content: str,
+        job_url: str,
+        cv_text: str,
+        model: str,
+        scrapegraph_cfg: "MCPServerConfig",
+    ) -> tuple[str, str]:
+        """Generate a cover letter using OpenAI Agents SDK with ScrapeGraph MCP tools.
+        Returns (cover_letter, prompt_used).
+        """
+        from app.services.openai_agents_service import openai_agents_service
+
+        job_section = ""
+        if job_content:
+            job_section = f"Contenu de l'offre d'emploi:\n{job_content[:4000]}"
+        elif job_url:
+            job_section = f"URL de l'offre d'emploi: {job_url}"
+        else:
+            job_section = "Aucune offre fournie."
+
+        cv_section = (
+            f"\nCV du candidat:\n{cv_text[:3000]}" if cv_text else "\nCV: Non fourni."
+        )
+
+        prompt = f"""Tu es un expert en recrutement et rédaction de lettres de motivation professionnelles.
+
+{job_section}
+{cv_section}
+
+Rédige une lettre de motivation professionnelle et convaincante en français pour ce poste.
+
+La lettre doit:
+1. Commencer par une accroche percutante qui montre la connaissance de l'entreprise/poste
+2. Présenter les compétences et expériences les plus pertinentes pour ce poste
+3. Montrer l'enthousiasme et la motivation pour le poste et l'entreprise
+4. Se terminer par un appel à l'action (demande d'entretien)
+5. Être structurée en 3-4 paragraphes bien construits
+6. Avoir un ton professionnel, dynamique et personnel
+7. Faire entre 300 et 450 mots
+
+Si tu as accès à des outils de scraping, tu peux les utiliser pour enrichir ta connaissance du poste ou de l'entreprise.
+Retourne uniquement la lettre de motivation complète, sans commentaires ni explications."""
+
+        result = openai_agents_service.run_agent(
+            prompt=prompt,
+            instructions=(
+                "Tu es un expert en rédaction de lettres de motivation professionnelles en français. "
+                "Tu rédiges des lettres percutantes, personnalisées et efficaces. "
+                "Si des outils MCP sont disponibles, utilise-les pour enrichir ta réponse."
+            ),
+            mcp_server_configs=[scrapegraph_cfg],
+            model=model,
+        )
+        cover_letter = result.get("text", "")
+        return cover_letter, prompt
+
     def _assess_fit(
         self,
         *,
@@ -311,7 +443,11 @@ Retourne uniquement la lettre de motivation complète, sans commentaires ni expl
 
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        job_section = f"Offre d'emploi:\n{job_content[:3000]}" if job_content else f"URL: {job_url}"
+        job_section = (
+            f"Offre d'emploi:\n{job_content[:3000]}"
+            if job_content
+            else f"URL: {job_url}"
+        )
         cv_section = f"CV:\n{cv_text[:2000]}" if cv_text else "CV: Non fourni."
 
         prompt = f"""Tu es un expert en recrutement.
@@ -331,7 +467,10 @@ Sois concis et structuré."""
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "Tu es un expert en recrutement et évaluation de candidatures."},
+                {
+                    "role": "system",
+                    "content": "Tu es un expert en recrutement et évaluation de candidatures.",
+                },
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,

@@ -13,6 +13,7 @@ requests
 beautifulsoup4
 openai
 openai-agents
+scrapegraph-py
 pdfplumber
 pypdf
 PyPDF2
