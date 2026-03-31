@@ -22,7 +22,7 @@ jobs:
         run: echo "SGAI_API_KEY is available for workflow runtime."
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build ${{ matrix.service }}
         uses: docker/build-push-action@v6
