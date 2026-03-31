@@ -31,6 +31,9 @@ st.set_page_config(
 
 CUSTOM_CSS = """
 <style>
+/* Hide Streamlit's auto-generated multi-page nav (we use our own radio nav) */
+[data-testid="stSidebarNav"] { display: none !important; }
+section[data-testid="stSidebarNav"] { display: none !important; }
 .block-container { padding-top: 1.25rem; padding-bottom: 2rem; max-width: 1400px; }
 [data-testid="stSidebar"] { background: linear-gradient(180deg, #0f172a 0%, #111827 100%); }
 [data-testid="stSidebar"] * { color: #e5eefb; }
@@ -84,7 +87,7 @@ def init_session_state() -> None:
     defaults = {
         "pipeline_last_result": None,
         "job_url_input": "",
-        "cv_pdf_input": "",
+        "cv_pdf_input": "/app/docs/CV.pdf",
         "dashboard_last_refresh_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "active_page": "Pilotage",
     }
@@ -227,44 +230,61 @@ def _render_app_page(client: ApiClient) -> None:
         "Le pipeline scrape l'offre, analyse votre profil et génère une lettre de motivation via OpenAI."
     )
 
-    # ── Input form ────────────────────────────────────────────────────────────
-    with st.container(border=True):
-        st.subheader("📋 Entrées")
+    # ── Two-column layout: input (left) | results (right) ────────────────────
+    col_left, col_right = st.columns([1, 2], gap="large")
 
+    with col_left:
         st.session_state.job_url_input = st.text_input(
             "🔗 URL de l'offre d'emploi",
             value=st.session_state.job_url_input,
-            placeholder="https://company.com/jobs/software-engineer",
+            placeholder="https://company.com/jobs/...",
             help="URL complète de l'offre d'emploi à analyser",
         )
 
-        col_cv_upload, col_cv_path = st.columns([1, 1])
-        with col_cv_upload:
+        st.session_state.cv_pdf_input = st.text_input(
+            "📄 Chemin CV (PDF)",
+            value=st.session_state.cv_pdf_input,
+            placeholder="/app/docs/CV.pdf",
+            help="Chemin absolu vers votre CV en PDF sur le serveur",
+        )
+
+        with st.expander("📎 Uploader un CV (optionnel)"):
             uploaded_cv = st.file_uploader(
-                "📎 Uploader votre CV (PDF)",
+                "CV PDF",
                 type=["pdf"],
-                help="Glissez-déposez votre CV en PDF",
-            )
-        with col_cv_path:
-            st.session_state.cv_pdf_input = st.text_input(
-                "📄 Ou chemin vers votre CV (PDF)",
-                value=st.session_state.cv_pdf_input,
-                placeholder="/data/cv.pdf  (optionnel)",
-                help="Chemin absolu vers votre CV en PDF (si déjà sur le serveur)",
+                help="Remplace le chemin ci-dessus si fourni",
+                label_visibility="collapsed",
             )
 
         run_clicked = st.button(
-            "▶️ Générer la lettre de motivation",
+            "▶️ Générer",
             type="primary",
             use_container_width=True,
         )
 
-    # ── Pipeline execution with progress ─────────────────────────────────────
+        # Status / last run info in left column
+        result_sidebar = st.session_state.pipeline_last_result
+        if result_sidebar:
+            steps_sb = result_sidebar.get("steps", [])
+            completed = sum(1 for s in steps_sb if s.get("status") == "completed")
+            status_val = result_sidebar.get("status", "unknown")
+            status_color = (
+                "🟢"
+                if status_val == "completed"
+                else "🟡" if status_val == "partial" else "🔴"
+            )
+            st.markdown(
+                f"**Dernier run:** {status_color} `{status_val}` — {completed}/{len(steps_sb)} étapes"
+            )
+            st.caption(f"Run ID: `{str(result_sidebar.get('run_id', ''))[-8:]}`")
+
+    # ── Pipeline execution (triggered from left column button) ────────────────
     if run_clicked:
         job_url = str(st.session_state.job_url_input or "").strip()
 
         if not job_url:
-            st.warning("⚠️ Veuillez entrer une URL d'offre d'emploi.")
+            with col_left:
+                st.warning("⚠️ Veuillez entrer une URL d'offre d'emploi.")
             return
 
         # Handle CV: uploaded file takes priority over path
@@ -272,9 +292,9 @@ def _render_app_page(client: ApiClient) -> None:
         if uploaded_cv is not None:
             try:
                 cv_path = _save_uploaded_cv(uploaded_cv)
-                st.info(f"✅ CV uploadé : {uploaded_cv.name} → {cv_path}")
             except Exception as exc:
-                st.warning(f"⚠️ Impossible de sauvegarder le CV : {exc}")
+                with col_left:
+                    st.warning(f"⚠️ Impossible de sauvegarder le CV : {exc}")
         elif str(st.session_state.cv_pdf_input or "").strip():
             cv_path = str(st.session_state.cv_pdf_input or "").strip()
 
@@ -287,9 +307,8 @@ def _render_app_page(client: ApiClient) -> None:
             "options": {"mode": "mcp_first_openai_agents"},
         }
 
-        # Show animated progress while waiting for the backend (up to 120s)
-        progress_placeholder = st.empty()
-        with progress_placeholder.container():
+        # Show animated progress in right column while waiting
+        with col_right:
             with st.status(
                 "⚙️ Pipeline en cours d'exécution...", expanded=True
             ) as status_widget:
@@ -305,7 +324,6 @@ def _render_app_page(client: ApiClient) -> None:
                 st.write("🎯 Étape 4 — Analyse d'adéquation candidat/poste...")
                 st.caption("⏳ Cela peut prendre 15-30 secondes selon OpenAI...")
 
-                # Use pipeline_timeout (120s) to avoid "API unreachable" on slow OpenAI calls
                 result = client.post_pipeline(
                     "/api/v1/pipeline/full",
                     payload=payload,
@@ -325,88 +343,92 @@ def _render_app_page(client: ApiClient) -> None:
                         label="❌ Pipeline échoué", state="error", expanded=False
                     )
 
-        progress_placeholder.empty()
-
         st.session_state.pipeline_last_result = result
         st.session_state.dashboard_last_refresh_at = datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
         )
         st.rerun()
 
-    # ── Results display ───────────────────────────────────────────────────────
-    st.divider()
-
-    result = st.session_state.pipeline_last_result
-    if not result:
-        st.info(
-            "💡 Entrez une URL d'offre d'emploi et cliquez sur **Générer la lettre de motivation**."
-        )
-        return
-
-    # Summary metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Run ID", str(result.get("run_id", "—"))[-8:])
-    col2.metric("Type", str(result.get("pipeline_type", "full")))
-    col3.metric("Statut", str(result.get("status", "unknown")))
-    steps = result.get("steps", [])
-    col4.metric(
-        "Étapes",
-        f"{sum(1 for s in steps if s.get('status') == 'completed')}/{len(steps)}",
-    )
-
-    # Quick cover letter extraction for top display
-    cover_letter_top = ""
-    for step in steps:
-        output = step.get("output", {})
-        cl = output.get("cover_letter", "")
-        if cl and not cl.startswith("Erreur:"):
-            cover_letter_top = cl
-            break
-
-    if cover_letter_top:
-        st.success("✅ Lettre de motivation générée avec succès !")
-        st.markdown("## 📄 Votre lettre de motivation")
-        st.markdown(
-            f'<div class="cover-letter-box">{cover_letter_top}</div>',
-            unsafe_allow_html=True,
-        )
-        col_dl1, col_dl2 = st.columns([1, 3])
-        with col_dl1:
-            st.download_button(
-                label="⬇️ Télécharger (.txt)",
-                data=cover_letter_top,
-                file_name="lettre_de_motivation.txt",
-                mime="text/plain",
-                key="dl_cover_top",
+    # ── Results display (right column) ────────────────────────────────────────
+    with col_right:
+        result = st.session_state.pipeline_last_result
+        if not result:
+            st.info(
+                "💡 Entrez une URL d'offre d'emploi et cliquez sur **Générer la lettre de motivation**."
+            )
+        else:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Run ID", str(result.get("run_id", "—"))[-8:])
+            col2.metric("Type", str(result.get("pipeline_type", "full")))
+            col3.metric("Statut", str(result.get("status", "unknown")))
+            steps = result.get("steps", [])
+            col4.metric(
+                "Étapes",
+                f"{sum(1 for s in steps if s.get('status') == 'completed')}/{len(steps)}",
             )
 
-    # Fit assessment quick display
-    for step in steps:
-        output = step.get("output", {})
-        fit = output.get("fit_assessment", "")
-        if fit:
-            with st.expander("🎯 Analyse d'adéquation candidat/poste", expanded=False):
-                st.markdown(fit)
-            break
+            # Cover letter — shown prominently at top of results column
+            cover_letter_top = ""
+            for step in steps:
+                output = step.get("output", {})
+                cl = output.get("cover_letter", "")
+                if cl and not cl.startswith("Erreur:"):
+                    cover_letter_top = cl
+                    break
 
-    # Detailed steps
-    st.divider()
-    st.subheader("🔬 Détail des étapes du pipeline")
+            if cover_letter_top:
+                st.success("✅ Lettre de motivation générée avec succès !")
+                st.markdown("### 📄 Votre lettre de motivation")
+                st.markdown(
+                    f'<div class="cover-letter-box">{cover_letter_top}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.download_button(
+                    label="⬇️ Télécharger (.txt)",
+                    data=cover_letter_top,
+                    file_name="lettre_de_motivation.txt",
+                    mime="text/plain",
+                    key="dl_cover_top",
+                )
+            else:
+                # Show error if no cover letter
+                for step in steps:
+                    if step.get("step", "").startswith("3_"):
+                        detail = step.get("detail", "")
+                        if detail:
+                            st.warning(f"⚠️ Lettre non générée: {detail}")
+                        break
 
-    if not steps:
-        st.warning("Aucune étape retournée par le pipeline.")
-        if result.get("error"):
-            st.error(f"Erreur: {result['error']}")
-    else:
-        for i, step in enumerate(steps, start=1):
-            with st.expander(
-                f"{STATUS_ICON.get(step.get('status', 'unknown'), '❓')} Étape {i}: {step.get('step', '')} — {step.get('detail', '')}",
-                expanded=(step.get("status") == "failed"),
-            ):
-                _render_step(step, i)
+            # Fit assessment
+            for step in steps:
+                output = step.get("output", {})
+                fit = output.get("fit_assessment", "")
+                if fit:
+                    with st.expander(
+                        "🎯 Analyse d'adéquation candidat/poste", expanded=False
+                    ):
+                        st.markdown(fit)
+                    break
 
-    with st.expander("📦 Réponse brute JSON", expanded=False):
-        st.json(result)
+            # Detailed steps
+            st.divider()
+            st.subheader("🔬 Détail des étapes")
+
+            if not steps:
+                st.warning("Aucune étape retournée par le pipeline.")
+                if result.get("error"):
+                    st.error(f"Erreur: {result['error']}")
+            else:
+                for i, step in enumerate(steps, start=1):
+                    with st.expander(
+                        f"{STATUS_ICON.get(step.get('status', 'unknown'), '❓')} Étape {i}: {step.get('step', '')} — {step.get('detail', '')}",
+                        expanded=(step.get("status") == "failed"),
+                    ):
+                        _render_step(step, i)
+
+            with st.expander("📦 Réponse brute JSON", expanded=False):
+                st.json(result)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
