@@ -1,0 +1,182 @@
+.
+├── app
+│   ├── api
+│   │   └── routes
+│   │       ├── dashboard.py
+│   │       ├── health.py
+│   │       ├── pipeline.py
+│   │       ├── providers.py
+│   │       └── __pycache__
+│   │           ├── dashboard.cpython-312.pyc
+│   │           ├── health.cpython-312.pyc
+│   │           ├── pipeline.cpython-312.pyc
+│   │           └── providers.cpython-312.pyc
+│   ├── core
+│   │   ├── config.py
+│   │   ├── __init__.py
+│   │   └── __pycache__
+│   │       ├── config.cpython-312.pyc
+│   │       └── __init__.cpython-312.pyc
+│   ├── db
+│   │   ├── base.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── base.cpython-312.pyc
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   └── session.cpython-312.pyc
+│   │   └── session.py
+│   ├── Dockerfile
+│   ├── __init__.py
+│   ├── integrations
+│   │   ├── github_actions.py
+│   │   ├── providers.py
+│   │   └── __pycache__
+│   │       ├── github_actions.cpython-312.pyc
+│   │       └── providers.cpython-312.pyc
+│   ├── main.py
+│   ├── models
+│   │   ├── base.py
+│   │   ├── documents.py
+│   │   ├── entities.py
+│   │   ├── github_actions.py
+│   │   ├── __init__.py
+│   │   ├── llm.py
+│   │   ├── pipeline.py
+│   │   └── __pycache__
+│   │       ├── base.cpython-312.pyc
+│   │       ├── documents.cpython-312.pyc
+│   │       ├── entities.cpython-312.pyc
+│   │       ├── github_actions.cpython-312.pyc
+│   │       ├── __init__.cpython-312.pyc
+│   │       ├── llm.cpython-312.pyc
+│   │       └── pipeline.cpython-312.pyc
+│   ├── __pycache__
+│   │   ├── __init__.cpython-312.pyc
+│   │   └── main.cpython-312.pyc
+│   ├── schemas
+│   │   ├── dashboard.py
+│   │   ├── pipeline.py
+│   │   └── __pycache__
+│   │       ├── dashboard.cpython-312.pyc
+│   │       └── pipeline.cpython-312.pyc
+│   └── services
+│       ├── dashboard_service.py
+│       ├── __init__.py
+│       ├── openai_agents_service.py
+│       ├── openai_service.py
+│       ├── orchestration_service.py
+│       ├── pipeline_service.py
+│       ├── __pycache__
+│       │   ├── dashboard_service.cpython-312.pyc
+│       │   ├── __init__.cpython-312.pyc
+│       │   ├── openai_agents_service.cpython-312.pyc
+│       │   ├── openai_service.cpython-312.pyc
+│       │   ├── pipeline_service.cpython-312.pyc
+│       │   └── secret_service.cpython-312.pyc
+│       └── secret_service.py
+├── app.py
+├── dashboard
+│   ├── app.py
+│   ├── assets
+│   │   ├── architecture_overview.svg
+│   │   ├── er_current_schema.svg
+│   │   └── er_target_schema.svg
+│   ├── components
+│   │   ├── __init__.py
+│   │   ├── metrics.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   ├── metrics.cpython-312.pyc
+│   │   │   └── sections.cpython-312.pyc
+│   │   └── sections.py
+│   ├── dashboard_inspection_report.md
+│   ├── Dockerfile
+│   ├── pages
+│   │   ├── diagnostics.py
+│   │   ├── diagrams.py
+│   │   ├── entities.py
+│   │   ├── github_actions.py
+│   │   ├── __init__.py
+│   │   ├── live_logs.py
+│   │   ├── llm_history.py
+│   │   ├── overview.py
+│   │   ├── __pycache__
+│   │   │   ├── diagnostics.cpython-312.pyc
+│   │   │   ├── diagrams.cpython-312.pyc
+│   │   │   ├── entities.cpython-312.pyc
+│   │   │   ├── github_actions.cpython-312.pyc
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   ├── live_logs.cpython-312.pyc
+│   │   │   ├── llm_history.cpython-312.pyc
+│   │   │   ├── overview.cpython-312.pyc
+│   │   │   └── runs.cpython-312.pyc
+│   │   └── runs.py
+│   ├── __pycache__
+│   │   └── app.cpython-312.pyc
+│   ├── requirements.txt
+│   ├── services
+│   │   ├── api_client.py
+│   │   ├── api_routes.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── api_client.cpython-312.pyc
+│   │   │   ├── api_routes.cpython-312.pyc
+│   │   │   ├── __init__.cpython-312.pyc
+│   │   │   └── view_models.cpython-312.pyc
+│   │   └── view_models.py
+│   └── utils
+│       ├── formatters.py
+│       ├── __init__.py
+│       └── __pycache__
+│           ├── formatters.cpython-312.pyc
+│           └── __init__.cpython-312.pyc
+├── data
+│   └── cv_upload.pdf
+├── docker-compose.yml
+├── docs
+│   ├── architecture_data_audit_2026-03-31.md
+│   ├── architecture_review_2026-03-31.md
+│   ├── CV.pdf
+│   ├── database_schema_proposal.md
+│   ├── github-actions-workflows.md
+│   ├── Job Bot — Lettre de motivation.pdf
+│   ├── mcp_architecture_blueprint.md
+│   ├── mcp_client_purpose_matrix.md
+│   ├── mcp_server_function_skeletons.md
+│   ├── mcp_transport_recommendations.md
+│   ├── openai_agents_mcp_audit.md
+│   └── openai-agents-python-main.zip
+├── job-bot-general.code-workspace
+├── ktree.txt
+├── mcp_host
+│   ├── clients
+│   │   ├── fetch_client.py
+│   │   ├── filesystem_client.py
+│   │   ├── github_client.py
+│   │   ├── __init__.py
+│   │   ├── postgres_client.py
+│   │   └── scrapegraph_client.py
+│   ├── core
+│   │   ├── base_client.py
+│   │   └── __init__.py
+│   ├── Dockerfile
+│   ├── __init__.py
+│   ├── main.py
+│   ├── servers
+│   │   ├── __init__.py
+│   │   └── registry.py
+│   └── utils
+│       ├── __init__.py
+│       └── translator.py
+├── output
+│   ├── generation_results.json
+│   ├── job_data.json
+│   └── mcp_pipeline_result.json
+├── requirements.txt
+├── scripts
+│   ├── check_git_sync.sh
+│   └── create_zip_ultrafast.py
+├── start.sh
+└── TODO.md
+
+38 directories, 142 files
