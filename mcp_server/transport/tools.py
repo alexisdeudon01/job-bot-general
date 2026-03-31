@@ -148,7 +148,7 @@ def register_tools(mcp, client: OrchestratorClient) -> None:
             seen: set[str] = set()
             for fragment in source_fragments:
                 for raw_token in fragment.replace("/", " ").replace(",", " ").split():
-                    token = raw_token.strip("()[]{}<>.:;!?"'")
+                    token = raw_token.strip("()[]{}<>.:;!?\"'")
                     if len(token) < 3:
                         continue
                     if not any(character.isalpha() for character in token):
