@@ -5,7 +5,7 @@
 # 1. Arrête et supprime les containers existants du projet
 # 2. Vérifie / crée le virtualenv local (.venv)
 # 3. Vérifie / installe les dépendances Python
-# 4. Build et lance tous les services Docker (postgres, redis, orchestrator, dashboard)
+# 4. Build et lance tous les services Docker (postgres, orchestrator, dashboard)
 # 5. Ouvre le dashboard dans le navigateur
 # =============================================================================
 
@@ -147,11 +147,11 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 step "Étape 4/4 — Build et lancement des services Docker"
 
-info "Build des images Docker (postgres, redis, orchestrator, dashboard)..."
+info "Build des images Docker (postgres, orchestrator, dashboard)..."
 docker compose -f "$COMPOSE_FILE" build --parallel 2>&1 | grep -E "^(#|=>|\[|\-\-\-|ERROR|WARN|Step|Successfully)" || true
 
 info "Démarrage des services principaux..."
-docker compose -f "$COMPOSE_FILE" up -d postgres redis orchestrator dashboard
+docker compose -f "$COMPOSE_FILE" up -d postgres orchestrator dashboard
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Attente que les services soient prêts
@@ -218,7 +218,6 @@ echo "╠═══════════════════════�
 echo -e "║  Dashboard Streamlit : ${DASHBOARD_URL}          ║"
 echo -e "║  API Orchestrateur   : ${API_URL}               ║"
 echo -e "║  PostgreSQL          : localhost:5432                    ║"
-echo -e "║  Redis               : localhost:6379                    ║"
 echo "╠══════════════════════════════════════════════════════════╣"
 echo "║  Logs : docker compose logs -f                           ║"
 echo "║  Stop : docker compose down                              ║"
