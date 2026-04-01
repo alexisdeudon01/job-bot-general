@@ -1,9 +1,63 @@
-# Updated docker-compose file
-version: '3'
 services:
-  app:
-    image: app-image:latest
-    ports:
-      - "5000:5000"
+  postgres:
+    image: postgres:15-alpine
     environment:
-      - NODE_ENV=production
+      POSTGRES_USER: postgres
+      # Default credentials match DATABASE_URL used in CI and local dev (.env)
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: job_bot_general
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d job_bot_general"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+    depends_on:
+      - orchestrator
+
+  mcp-host:
+    build:
+      context: .
+      dockerfile: mcp_host/Dockerfile
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+    depends_on:
+      - orchestrator
+    profiles:
+      - mcp
+    # Keep the container alive so CI can run one-off `docker compose exec` commands
+    # (e.g. --list-tools, --list-registry) without a long-running daemon process.
+    command: ["tail", "-f", "/dev/null"]
+
+volumes:
+  postgres_data:
